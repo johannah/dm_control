@@ -22,8 +22,8 @@ _CONTROL_TIMESTEP = .01  # (Seconds)
 _TIME_LIMIT = 10  # (Seconds)
 _P_IN_HAND = .1  # Probabillity of object-in-hand initial state
 _P_IN_TARGET = .1  # Probabillity of object-in-target initial state
-_ARM_JOINTS = (['jaco_joint_{}'.format(i) for i in range(6)] +
-               ['jaco_joint_finger_{}'.format(i) for i in range(3)])
+_ARM_JOINTS = (['jaco_joint_{}'.format(i + 1) for i in range(6)] +
+               ['jaco_joint_finger_{}'.format(i + 1) for i in range(3)])
 _ALL_PROPS = frozenset(['ball', 'target_ball', 'cup',
                         'peg', 'target_peg', 'slot'])
 
@@ -32,12 +32,11 @@ SUITE = containers.TaggedTasks()
 
 def make_model(use_peg, insert):
   """Returns a tuple containing the model XML string and a dict of assets."""
-  xml_string = common.read_model('assets/jaco.xml')
+  xml_string = common.read_model('jaco.xml')
   parser = etree.XMLParser(remove_blank_text=True)
   mjcf = etree.XML(xml_string, parser)
 
   # Select the desired prop.
-  '''
   if use_peg:
     required_props = ['peg', 'target_peg']
     if insert:
@@ -51,12 +50,10 @@ def make_model(use_peg, insert):
   for unused_prop in _ALL_PROPS.difference(required_props):
     prop = xml_tools.find_element(mjcf, 'body', unused_prop)
     prop.getparent().remove(prop)
-   '''
+  
   return etree.tostring(mjcf, pretty_print=True), common.ASSETS
 
-'''
-What follows should be used as examples to create the jaco arm tasks
-
+# What follows should be used as examples to create the jaco arm tasks
 @SUITE.add('benchmarking', 'hard')
 def bring_ball(fully_observable=True, time_limit=_TIME_LIMIT, random=None,
                environment_kwargs=None):
@@ -115,7 +112,6 @@ def insert_peg(fully_observable=True, time_limit=_TIME_LIMIT, random=None,
   return control.Environment(
       physics, task, control_timestep=_CONTROL_TIMESTEP, time_limit=time_limit,
       **environment_kwargs)
-'''
 
 class Physics(mujoco.Physics):
   """Physics with additional features for the Planar Manipulator domain."""
@@ -146,15 +142,17 @@ class Physics(mujoco.Physics):
   def site_distance(self, site1, site2):
     site1_to_site2 = np.diff(self.named.data.site_xpos[[site2, site1]], axis=0)
     return np.linalg.norm(site1_to_site2)
+  
 
+class Bring(base.Task):
+  """A Bring `Task`: bring the prop to the target."""
 
-class Jaco(base.Task):
-  """A base class for Jaco arm tasks."""
-
-  def __init__(self, fully_observable, random=None):
-    """Initialize an instance of the `JacoBase` class.
+  def __init__(self, use_peg, insert, fully_observable, random=None):
+    """Initialize an instance of the `Bring` task.
 
     Args:
+      use_peg: A `bool`, whether to replace the ball prop with the peg prop.
+      insert: A `bool`, whether to insert the prop in a receptacle.
       fully_observable: A `bool`, whether the observation should contain the
         position and velocity of the object being manipulated and the target
         location.
@@ -162,16 +160,14 @@ class Jaco(base.Task):
         integer seed for creating a new `RandomState`, or None to select a seed
         automatically (default).
     """
-    '''
     self._use_peg = use_peg
     self._target = 'target_peg' if use_peg else 'target_ball'
     self._object = 'peg' if self._use_peg else 'ball'
     self._object_joints = ['_'.join([self._object, dim]) for dim in 'xzy']
     self._receptacle = 'slot' if self._use_peg else 'cup'
     self._insert = insert
-    '''
     self._fully_observable = fully_observable
-    super(Jaco, self).__init__(random=random)
+    super(Bring, self).__init__(random=random)
 
   def initialize_episode(self, physics):
     """Sets the state of the environment at the start of each episode."""
@@ -193,9 +189,8 @@ class Jaco(base.Task):
       angles = uniform(lower_limits, upper_limits)
       data.qpos[_ARM_JOINTS] = angles
 
-      '''
       # Symmetrize hand.
-      data.qpos['finger'] = data.qpos['thumb']
+      # data.qpos['finger'] = data.qpos['thumb']
 
       # Randomise target location.
       target_x = uniform(-.4, .4)
@@ -213,27 +208,26 @@ class Jaco(base.Task):
           np.cos(target_angle/2), np.sin(target_angle/2)]
 
       # Randomise object location.
-      object_init_probs = [_P_IN_HAND, _P_IN_TARGET, 1-_P_IN_HAND-_P_IN_TARGET]
-      init_type = choice(['in_hand', 'in_target', 'uniform'],
-                         p=object_init_probs)
-      if init_type == 'in_target':
-        object_x = target_x
-        object_z = target_z
-        object_angle = target_angle
-      elif init_type == 'in_hand':
-        physics.after_reset()
-        object_x = data.site_xpos['grasp', 'x']
-        object_z = data.site_xpos['grasp', 'z']
-        grasp_direction = data.site_xmat['grasp', ['xx', 'zx']]
-        object_angle = np.pi-np.arctan2(grasp_direction[1], grasp_direction[0])
-      else:
-        object_x = uniform(-.5, .5)
-        object_z = uniform(0, .7)
-        object_angle = uniform(0, 2*np.pi)
-        data.qvel[self._object + '_x'] = uniform(-5, 5)
+      # object_init_probs = [_P_IN_HAND, _P_IN_TARGET, 1-_P_IN_HAND-_P_IN_TARGET]
+      # init_type = choice(['in_hand', 'in_target', 'uniform'],
+      #                    p=object_init_probs)
+      # if init_type == 'in_target':
+      #   object_x = target_x
+      #   object_z = target_z
+      #   object_angle = target_angle
+      # elif init_type == 'in_hand':
+      #   physics.after_reset()
+      #   object_x = data.site_xpos['grasp', 'x']
+      #   object_z = data.site_xpos['grasp', 'z']
+      #   grasp_direction = data.site_xmat['grasp', ['xx', 'zx']]
+      #   object_angle = np.pi-np.arctan2(grasp_direction[1], grasp_direction[0])
+      # else:
+      object_x = uniform(-.5, .5)
+      object_z = uniform(0, .7)
+      object_angle = uniform(0, 2*np.pi)
+      data.qvel[self._object + '_x'] = uniform(-5, 5)
 
       data.qpos[self._object_joints] = object_x, object_z, object_angle
-      '''
 
       # Check for collisions.
       physics.after_reset()
@@ -242,18 +236,45 @@ class Jaco(base.Task):
     super(Bring, self).initialize_episode(physics)
 
   def get_observation(self, physics):
-    """Returns either features or only sensors (to be used with pixels)."""
-    obs = collections.OrderedDict()
-    obs['arm_pos'] = physics.bounded_joint_pos(_ARM_JOINTS)
-    obs['arm_vel'] = physics.joint_vel(_ARM_JOINTS)
-    obs['touch'] = physics.touch()
-    if self._fully_observable:
-      obs['hand_pos'] = physics.body_2d_pose('hand')
-      obs['object_pos'] = physics.body_2d_pose(self._object)
-      obs['object_vel'] = physics.joint_vel(self._object_joints)
-      obs['target_pos'] = physics.body_2d_pose(self._target)
-    return obs
+    # """Returns either features or only sensors (to be used with pixels)."""
+    # obs = collections.OrderedDict()
+    # obs['arm_pos'] = physics.bounded_joint_pos(_ARM_JOINTS)
+    # obs['arm_vel'] = physics.joint_vel(_ARM_JOINTS)
+    # obs['touch'] = physics.touch()
+    # if self._fully_observable:
+    #   pass
+    #   # obs['hand_pos'] = physics.body_2d_pose('jaco_link_hand')
+    #   # obs['object_pos'] = physics.body_2d_pose(self._object)
+    #   # obs['object_vel'] = physics.joint_vel(self._object_joints)
+    #   # obs['target_pos'] = physics.body_2d_pose(self._target)
+    # return obs
+    return 0.
+
+  def _is_close(self, distance):
+    # return rewards.tolerance(distance, (0, _CLOSE), _CLOSE*2)
+    return 0.
+
+  def _peg_reward(self, physics):
+    """Returns a reward for bringing the peg prop to the target."""
+    # grasp = self._is_close(physics.site_distance('peg_grasp', 'grasp'))
+    # pinch = self._is_close(physics.site_distance('peg_pinch', 'pinch'))
+    # grasping = (grasp + pinch) / 2
+    # bring = self._is_close(physics.site_distance('peg', 'target_peg'))
+    # bring_tip = self._is_close(physics.site_distance('target_peg_tip',
+    #                                                  'peg_tip'))
+    # bringing = (bring + bring_tip) / 2
+    # return max(bringing, grasping/3)
+    return 0.
+
+  def _ball_reward(self, physics):
+    """Returns a reward for bringing the ball prop to the target."""
+    # return self._is_close(physics.site_distance('ball', 'target_ball'))
+    return 0.
 
   def get_reward(self, physics):
     """Returns a reward to the agent."""
-    return 0
+    # if self._use_peg:
+    #   return self._peg_reward(physics)
+    # else:
+    #   return self._ball_reward(physics)
+    return 0.

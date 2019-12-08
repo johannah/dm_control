@@ -27,6 +27,20 @@ _FILENAMES = [
     "./common/materials.xml",
     "./common/skybox.xml",
     "./common/visual.xml",
+    "./common/meshes/finger_distal_limb_1.stl",
+    "./common/meshes/finger_distal_limb_2.stl",
+    "./common/meshes/finger_proximal_limb_1.stl",
+    "./common/meshes/finger_proximal_limb_2.stl",
+    "./common/meshes/jaco_link_1.stl",
+    "./common/meshes/jaco_link_2.stl",
+    "./common/meshes/jaco_link_3.stl",
+    "./common/meshes/jaco_link_4.stl",
+    "./common/meshes/jaco_link_5.stl",        
+    "./common/meshes/jaco_link_base.stl",
+    "./common/meshes/jaco_link_finger_1.stl",
+    "./common/meshes/jaco_link_finger_2.stl",
+    "./common/meshes/jaco_link_finger_3.stl",
+    "./common/meshes/jaco_link_hand.stl",    
 ]
 
 ASSETS = {filename: resources.GetResource(os.path.join(_SUITE_DIR, filename))

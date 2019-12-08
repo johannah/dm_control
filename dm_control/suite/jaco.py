@@ -24,8 +24,7 @@ _P_IN_HAND = .1  # Probabillity of object-in-hand initial state
 _P_IN_TARGET = .1  # Probabillity of object-in-target initial state
 _ARM_JOINTS = (['jaco_joint_{}'.format(i + 1) for i in range(6)] +
                ['jaco_joint_finger_{}'.format(i + 1) for i in range(3)])
-_ALL_PROPS = frozenset(['ball', 'target_ball', 'cup',
-                        'peg', 'target_peg', 'slot'])
+_ALL_PROPS = frozenset([])
 
 SUITE = containers.TaggedTasks()
 
@@ -34,23 +33,7 @@ def make_model(use_peg, insert):
   """Returns a tuple containing the model XML string and a dict of assets."""
   xml_string = common.read_model('jaco.xml')
   parser = etree.XMLParser(remove_blank_text=True)
-  mjcf = etree.XML(xml_string, parser)
-
-  # Select the desired prop.
-  if use_peg:
-    required_props = ['peg', 'target_peg']
-    if insert:
-      required_props += ['slot']
-  else:
-    required_props = ['ball', 'target_ball']
-    if insert:
-      required_props += ['cup']
-
-  # Remove unused props
-  for unused_prop in _ALL_PROPS.difference(required_props):
-    prop = xml_tools.find_element(mjcf, 'body', unused_prop)
-    prop.getparent().remove(prop)
-  
+  mjcf = etree.XML(xml_string, parser)  
   return etree.tostring(mjcf, pretty_print=True), common.ASSETS
 
 # What follows should be used as examples to create the jaco arm tasks
@@ -160,12 +143,6 @@ class Bring(base.Task):
         integer seed for creating a new `RandomState`, or None to select a seed
         automatically (default).
     """
-    self._use_peg = use_peg
-    self._target = 'target_peg' if use_peg else 'target_ball'
-    self._object = 'peg' if self._use_peg else 'ball'
-    self._object_joints = ['_'.join([self._object, dim]) for dim in 'xzy']
-    self._receptacle = 'slot' if self._use_peg else 'cup'
-    self._insert = insert
     self._fully_observable = fully_observable
     super(Bring, self).__init__(random=random)
 
@@ -192,43 +169,6 @@ class Bring(base.Task):
       # Symmetrize hand.
       # data.qpos['finger'] = data.qpos['thumb']
 
-      # Randomise target location.
-      target_x = uniform(-.4, .4)
-      target_z = uniform(.1, .4)
-      if self._insert:
-        target_angle = uniform(-np.pi/3, np.pi/3)
-        model.body_pos[self._receptacle, ['x', 'z']] = target_x, target_z
-        model.body_quat[self._receptacle, ['qw', 'qy']] = [
-            np.cos(target_angle/2), np.sin(target_angle/2)]
-      else:
-        target_angle = uniform(-np.pi, np.pi)
-
-      model.body_pos[self._target, ['x', 'z']] = target_x, target_z
-      model.body_quat[self._target, ['qw', 'qy']] = [
-          np.cos(target_angle/2), np.sin(target_angle/2)]
-
-      # Randomise object location.
-      # object_init_probs = [_P_IN_HAND, _P_IN_TARGET, 1-_P_IN_HAND-_P_IN_TARGET]
-      # init_type = choice(['in_hand', 'in_target', 'uniform'],
-      #                    p=object_init_probs)
-      # if init_type == 'in_target':
-      #   object_x = target_x
-      #   object_z = target_z
-      #   object_angle = target_angle
-      # elif init_type == 'in_hand':
-      #   physics.after_reset()
-      #   object_x = data.site_xpos['grasp', 'x']
-      #   object_z = data.site_xpos['grasp', 'z']
-      #   grasp_direction = data.site_xmat['grasp', ['xx', 'zx']]
-      #   object_angle = np.pi-np.arctan2(grasp_direction[1], grasp_direction[0])
-      # else:
-      object_x = uniform(-.5, .5)
-      object_z = uniform(0, .7)
-      object_angle = uniform(0, 2*np.pi)
-      data.qvel[self._object + '_x'] = uniform(-5, 5)
-
-      data.qpos[self._object_joints] = object_x, object_z, object_angle
-
       # Check for collisions.
       physics.after_reset()
       penetrating = physics.data.ncon > 0
@@ -237,18 +177,13 @@ class Bring(base.Task):
 
   def get_observation(self, physics):
     # """Returns either features or only sensors (to be used with pixels)."""
-    # obs = collections.OrderedDict()
-    # obs['arm_pos'] = physics.bounded_joint_pos(_ARM_JOINTS)
-    # obs['arm_vel'] = physics.joint_vel(_ARM_JOINTS)
-    # obs['touch'] = physics.touch()
-    # if self._fully_observable:
-    #   pass
-    #   # obs['hand_pos'] = physics.body_2d_pose('jaco_link_hand')
-    #   # obs['object_pos'] = physics.body_2d_pose(self._object)
-    #   # obs['object_vel'] = physics.joint_vel(self._object_joints)
-    #   # obs['target_pos'] = physics.body_2d_pose(self._target)
+    obs = collections.OrderedDict()
+    obs['arm_pos'] = physics.bounded_joint_pos(_ARM_JOINTS)
+    obs['arm_vel'] = physics.joint_vel(_ARM_JOINTS)
+    obs['touch'] = physics.touch()
+    if self._fully_observable:
+      obs['hand_pos'] = physics.body_2d_pose('jaco_link_hand')
     # return obs
-    return 0.
 
   def _is_close(self, distance):
     # return rewards.tolerance(distance, (0, _CLOSE), _CLOSE*2)

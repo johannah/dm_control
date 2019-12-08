@@ -142,7 +142,8 @@
       </body>
     </body>
 
-      <geom name="target" pos="0.6 0.3 0.3" rgba="0.9 0.2 0.2 1" size=".05" type="sphere" contype='0' conaffinity="0"/>
+    <!-- Target -->
+    <geom name="target" pos="0 0 .01" material="target" type="sphere" size=".05"/>
 
   </worldbody>
 
@@ -153,7 +154,7 @@
     <exclude body1='jaco_link_finger_2' body2='jaco_link_finger_3'/>
   </contact>
 
-   <!--sensor>
+  <!--sensor>
     <touch name="fingertip1" site='fingertip1'/>
     <touch name="fingertip2" site='fingertip2'/>
     <touch name="fingertip3" site='fingertip3'/>
@@ -163,14 +164,14 @@
     <torque name="basetorque" site='basesite'/>
   </sensor-->
 
-    <!--  ================= Velocity actuators ================= /-->
+  <!--  ================= Velocity actuators ================= /-->
   <actuator>
-    <velocity joint='jaco_joint_1'  name='Ajaco_joint_1' kv="25" ctrlrange="-1 1" ctrllimited="true"/>
-    <velocity joint='jaco_joint_2'  name='Ajaco_joint_2' kv="25" ctrlrange="-1 1" ctrllimited="true"/>
-    <velocity joint='jaco_joint_3'  name='Ajaco_joint_3' kv="25" ctrlrange="-1 1" ctrllimited="true"/>
-    <velocity joint='jaco_joint_4'  name='jaco_joint_4' kv="25"  ctrlrange="-1 1" ctrllimited="true"/>
-    <velocity joint='jaco_joint_5'  name='Ajaco_joint_5' kv="25" ctrlrange="-1 1" ctrllimited="true"/>
-    <velocity joint='jaco_joint_6'  name='Ajaco_joint_6' kv="25" ctrlrange="-1 1" ctrllimited="true"/>
+    <velocity joint='jaco_joint_1'  name='jaco_joint_1' kv="25" ctrlrange="-1 1" ctrllimited="true"/>
+    <velocity joint='jaco_joint_2'  name='jaco_joint_2' kv="25" ctrlrange="-1 1" ctrllimited="true"/>
+    <velocity joint='jaco_joint_3'  name='jaco_joint_3' kv="25" ctrlrange="-1 1" ctrllimited="true"/>
+    <velocity joint='jaco_joint_4'  name='jaco_joint_4' kv="25" ctrlrange="-1 1" ctrllimited="true"/>
+    <velocity joint='jaco_joint_5'  name='jaco_joint_5' kv="25" ctrlrange="-1 1" ctrllimited="true"/>
+    <velocity joint='jaco_joint_6'  name='jaco_joint_6' kv="25" ctrlrange="-1 1" ctrllimited="true"/>
   </actuator>
 
 </mujoco>

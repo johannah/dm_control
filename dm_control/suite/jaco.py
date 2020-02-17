@@ -37,9 +37,14 @@ def easy(time_limit=_DEFAULT_TIME_LIMIT, random=None, fully_observable=True, env
     return control.Environment(
         physics, task, time_limit=time_limit, **environment_kwargs)
 
-
 class Physics(mujoco.Physics):
     """Physics with additional features for the Planar Manipulator domain."""
+
+    def action_spec(self):
+        """ override base class action_spec """
+        #return mujoco.action_spec(self)
+        # todo how to make this general
+        return action_spec
 
     def bounded_joint_pos(self, joint_names):
         """Returns joint positions as (sin, cos) values."""
@@ -102,6 +107,10 @@ class Jaco(base.Task):
         self._fully_observable = fully_observable
         super(Jaco, self).__init__(random=random)
 
+    def action_spec(self, physics):
+        print('getting action spec')
+        return physics.action_spec()
+
     def initialize_episode(self, physics):
         """Sets the state of the environment at the start of each episode."""
         # Local aliases
@@ -109,30 +118,40 @@ class Jaco(base.Task):
         model = physics.named.model
         data = physics.named.data
 
+
         physics.named.model.geom_size['target', 0] = self._target_size
 
-        # Randomise angles of arm joints
-        is_limited = model.jnt_limited[_ARM_JOINTS].astype(np.bool)
-        joint_range = model.jnt_range[_ARM_JOINTS]
-        lower_limits = np.where(is_limited, joint_range[:, 0], -np.pi)
-        upper_limits = np.where(is_limited, joint_range[:, 1], np.pi)
-        angles = uniform(lower_limits, upper_limits)
-        data.qpos[_ARM_JOINTS] = angles
+        # JRH - skip this for now - I don't like the idea of reaching into
+        # physics class
+        ## Randomise angles of arm joints
+        #is_limited = model.jnt_limited[_ARM_JOINTS].astype(np.bool)
+        #joint_range = model.jnt_range[_ARM_JOINTS]
+        #lower_limits = np.where(is_limited, joint_range[:, 0], -np.pi)
+        #upper_limits = np.where(is_limited, joint_range[:, 1], np.pi)
+        #angles = uniform(lower_limits, upper_limits)
+        #data.qpos[_ARM_JOINTS] = angles
 
         # Randomize target position
-        physics.named.model.geom_pos['target', 'x'] = self.random.uniform(-0.6, 0.6)
-        physics.named.model.geom_pos['target', 'y'] = self.random.uniform(-0.6, 0.6)
-        physics.named.model.geom_pos['target', 'z'] = self.random.uniform(0.2, 1.)
+        target_x_pos = self.random.uniform(-0.6, 0.6)
+        target_y_pos = self.random.uniform(-0.6, 0.6)
+        target_z_pos = self.random.uniform(0.2, 1.)
+        physics.named.model.geom_pos['target', 'x'] = target_x_pos
+        physics.named.model.geom_pos['target', 'y'] = target_y_pos
+        physics.named.model.geom_pos['target', 'z'] = target_z_pos
 
         super(Jaco, self).initialize_episode(physics)
 
     def get_observation(self, physics):
         # """Returns either features or only sensors (to be used with pixels)."""
         obs = collections.OrderedDict()
+        # jaco_joint_1 thru 6 and jaco_joint_finger_1 thru 3 list shaped (9,2)
         obs['arm_pos'] = physics.bounded_joint_pos(_ARM_JOINTS)
+        # arm vel is shape (9,)
         obs['arm_vel'] = physics.joint_vel(_ARM_JOINTS)
         if self._fully_observable:
+            # hand pos is shape (7,)
             obs['hand_pos'] = physics.body_pose('jaco_link_hand')
+            # target pos is shape (3,)
             obs['target_pos'] = physics.geom_pos('target')
         return obs
 

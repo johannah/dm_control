@@ -50,6 +50,8 @@ from dm_env import specs
 
 import numpy as np
 import six
+import time
+from IPython import embed
 #Contexts = collections.namedtuple('Contexts', ['gl', 'mujoco'])
 Selected = collections.namedtuple(
     'Selected', ['body', 'geom', 'skin', 'world_position'])
@@ -65,7 +67,35 @@ _INVALID_PHYSICS_STATE = (
 _OVERLAYS_NOT_SUPPORTED_FOR_DEPTH_OR_SEGMENTATION = (
     'Overlays are not supported with depth or segmentation rendering.')
 
-from ros_interface.robot_interfaces import robot_client
+class RobotClient():
+    def __init__(self, robot_ip="127.0.0.1", port=9100):
+        self.robot_ip = robot_ip
+        self.port = port
+        self.connected = False
+
+    def connect(self):
+        while not self.connected:
+            print("attempting to connect with robot at {}".format(self.robot_ip))
+            self.tcp_socket = socket.socket(socket.AF_INET,socket.SOCK_STREAM)
+            # connect to computer
+            self.tcp_socket.connect((self.robot_ip, self.port))
+            print('connected')
+            self.connected = True
+            if not self.connected:
+                time.sleep(1)
+
+    def send(self, data):
+        print('sending', data)
+        self.tcp_socket.sendall(data)
+        rx = self.tcp_socket.recv(1024)
+        print('rx', rx)
+        return rx
+
+    def disconnect(self):
+        self.send('close')
+        print('disconnected from {}'.format(self.robot_ip))
+        self.tcp_socket.close()
+        self.connected = False
 
 class Physics(_control.Physics):
   """Encapsulates a robot.
@@ -99,13 +129,20 @@ class Physics(_control.Physics):
     #obj._contexts_lock = threading.Lock()  # pylint: disable=protected-access
     return obj
 
-  def __init__(self, data):
-    """Initializes a new `Physics` instance.
+  def __init__(self, robot_client):
+    """Initializes a new robot instance.
 
     Args:
-      data: Instance of `wrapper.MjData`.
+        robot_client: connection to robot over tcp
     """
-    #self._reload_from_data(data)
+    self.robot_client = robot_client
+    self.reset()
+
+  @classmethod
+  def from_cfg(cls, cfg_path):
+    rclient = RobotClient()
+    rclient.connect()
+    return cls(rclient)
 
   def enable_profiling(self):
     """should enable timing profiling."""
@@ -167,7 +204,8 @@ class Physics(_control.Physics):
       pass
 
   def reset(self):
-      self.robot.reset()
+      embed()
+      self.data = self.robot_client.send("RSET_")
 
   def after_reset(self):
     """Runs after resetting internal variables of the physics simulation."""
@@ -200,117 +238,52 @@ class Physics(_control.Physics):
   def __getstate__(self):
     return self.data  # All state is assumed to reside within `self.data`.
 
-  def __setstate__(self, data):
-    # Note: `_contexts_lock` is normally created in `__new__`, but `__new__` is
-    #       not invoked during unpickling.
-    #self._contexts_lock = threading.Lock()
-    self._reload_from_data(data)
+#  def __setstate__(self, data):
+#    # Note: `_contexts_lock` is normally created in `__new__`, but `__new__` is
+#    #       not invoked during unpickling.
+#    #self._contexts_lock = threading.Lock()
+#    self._reload_from_data(data)
 
-  def _reload_from_model(self, model):
-    """Initializes a new or existing `Physics` from a `wrapper.MjModel`.
-
-    Creates a new `wrapper.MjData` instance, then delegates to
-    `_reload_from_data`.
-
-    Args:
-      model: Instance of `wrapper.MjModel`.
-    """
-    #data = wrapper.MjData(model)
-    #self._reload_from_data(data)
-    pass
-
-  def _reload_from_data(self, data):
-    """Initializes a new or existing `Physics` instance from a `wrapper.MjData`.
-
-    Assigns all attributes, sets up named indexing, and creates rendering
-    contexts if rendering is enabled.
-
-    The default constructor as well as the other `reload_from` methods should
-    delegate to this method.
-
-    Args:
-      data: Instance of `wrapper.MjData`.
-    """
-    self._data = data
-
-    # Performance optimization: pre-allocate numpy arrays used when checking for
-    # MuJoCo warnings on each step.
-    self._warnings = self.data.warning.number
-    self._warnings_before = np.empty_like(self._warnings)
-    self._new_warnings = np.empty(dtype=bool, shape=self._warnings.shape)
-
-    # Forcibly free any previous GL context in order to avoid problems with GL
-    # implementations that do not support multiple contexts on a given device.
-    #with self._contexts_lock:
-    #  if self._contexts:
-    #    self._free_rendering_contexts()
-
-    # Call kinematics update to enable rendering.
-    try:
-      self.after_reset()
-    except _control.PhysicsError as e:
-      logging.warning(e)
-
-    # Set up named indexing.
-    axis_indexers = index.make_axis_indexers(self.model)
-    self._named = NamedIndexStructs(
-        data=index.struct_indexer(self.data, 'data', axis_indexers),)
+#  def _reload_from_data(self, data):
+#    """Initializes a new or existing `Physics` instance from a `wrapper.MjData`.
 #
-
-#    self._named = NamedIndexStructs(
-#        model=index.struct_indexer(self.model, 'mjmodel', axis_indexers),
-#        data=index.struct_indexer(self.data, 'mjdata', axis_indexers),)
+#    Assigns all attributes, sets up named indexing, and creates rendering
+#    contexts if rendering is enabled.
 #
-#  def free(self):
-#    """Frees the native MuJoCo data structures held by this `Physics` instance.
+#    The default constructor as well as the other `reload_from` methods should
+#    delegate to this method.
 #
-#    This is an advanced feature for use when manual memory management is
-#    necessary. This `Physics` object MUST NOT be used after this function has
-#    been called.
+#    Args:
+#      data: Instance of `wrapper.MjData`.
 #    """
-#    with self._contexts_lock:
-#      if self._contexts:
-#        self._free_rendering_contexts()
-#    self.data.free()
-#    self.model.free()
-
-  #@classmethod
-  #def from_model(cls, model):
-  #  """A named constructor from a `wrapper.MjModel` instance."""
-    #data = wrapper.MjData(model)
-    #return cls(data)
-
-  @classmethod
-  def from_xml_string(cls, xml_string, assets=None):
-    """A named constructor from a string containing an MJCF XML file.
-
-    Args:
-      xml_string: XML string containing an MJCF model description.
-      assets: Optional dict containing external assets referenced by the model
-        (such as additional XML files, textures, meshes etc.), in the form of
-        `{filename: contents_string}` pairs. The keys should correspond to the
-        filenames specified in the model XML.
-
-    Returns:
-      A new `Physics` instance.
-    """
-    #robot = load_from_str(xml_string, assets=assets)
-    #return robot
-
-  @classmethod
-  def from_xml_path(cls, file_path):
-    """A named constructor from a path to an MJCF XML file.
-
-    Args:
-      file_path: String containing path to model definition file.
-
-    Returns:
-      A new `Physics` instance.
-    """
-    #robot = from_xml_path(file_path)
-    #return robot
-
-  @classmethod
+#    print(data)
+#    self._data = data
+#
+#    # Performance optimization: pre-allocate numpy arrays used when checking for
+#    # MuJoCo warnings on each step.
+#    self._warnings = self.data.warning.number
+#    self._warnings_before = np.empty_like(self._warnings)
+#    self._new_warnings = np.empty(dtype=bool, shape=self._warnings.shape)
+#
+#    # Forcibly free any previous GL context in order to avoid problems with GL
+#    # implementations that do not support multiple contexts on a given device.
+#    #with self._contexts_lock:
+#    #  if self._contexts:
+#    #    self._free_rendering_contexts()
+#
+#    # Call kinematics update to enable rendering.
+#    try:
+#      self.after_reset()
+#    except _control.PhysicsError as e:
+#      logging.warning(e)
+#
+#    # Set up named indexing.
+#    axis_indexers = index.make_axis_indexers(self.model)
+#    self._named = NamedIndexStructs(
+#        data=index.struct_indexer(self.data, 'data', axis_indexers),)
+#
+#  def from_model(cls, model):
+#      data = wrapper.MjData(model)
 
   @property
   def named(self):
@@ -332,16 +305,16 @@ class Physics(_control.Physics):
   def data(self):
     return self._data
 
-  def _physics_state_items(self):
-    """Returns list of arrays making up internal physics simulation state.
-
-    The physics state consists of the state variables, their derivatives and
-    actuation activations.
-
-    Returns:
-      List of NumPy arrays containing full physics simulation state.
-    """
-    return [self.data.qpos, self.data.qvel, self.data.act]
+#  def _physics_state_items(self):
+#    """Returns list of arrays making up internal physics simulation state.
+#
+#    The physics state consists of the state variables, their derivatives and
+#    actuation activations.
+#
+#    Returns:
+#      List of NumPy arrays containing full physics simulation state.
+#    """
+#    return [self.data.qpos, self.data.qvel, self.data.act]
 
   # Named views of simulation data.
 

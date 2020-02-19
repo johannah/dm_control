@@ -13,6 +13,8 @@ from dm_control.suite import common
 from dm_control.utils import containers
 from dm_control.utils import rewards
 
+from dm_control import robot
+from IPython import embed
 import numpy as np
 
 _CONTROL_TIMESTEP = .01
@@ -31,20 +33,54 @@ def get_model_and_assets():
 @SUITE.add('benchmarking', 'easy')
 def easy(time_limit=_DEFAULT_TIME_LIMIT, random=None, fully_observable=True, environment_kwargs=None):
     """Returns reacher with sparse reward with 5e-2 tol and randomized target."""
-    physics = Physics.from_xml_string(*get_model_and_assets())
-    task = Jaco(target_size=_BIG_TARGET, fully_observable=fully_observable, random=random)
-    environment_kwargs = environment_kwargs or {}
-    return control.Environment(
-        physics, task, time_limit=time_limit, **environment_kwargs)
+    # we don't need the model/assets for the real robot
+    #physics = MujocoPhysics.from_xml_string(*get_model_and_assets())
+    physics = RobotPhysics.from_cfg('default_path')
+    embed()
+    #task = Jaco(target_size=_BIG_TARGET, fully_observable=fully_observable, random=random)
+    #environment_kwargs = environment_kwargs or {}
+    #return control.Environment(
+    #    physics, task, time_limit=time_limit, **environment_kwargs)
 
-class Physics(mujoco.Physics):
+class MujocoPhysics(mujoco.Physics):
     """Physics with additional features for the Planar Manipulator domain."""
 
     def action_spec(self):
         """ override base class action_spec """
-        #return mujoco.action_spec(self)
-        # todo how to make this general
-        return action_spec
+        return mujoco.action_spec(self)
+
+class RobotPhysics(robot.Physics):
+    """Physics with additional features for the Planar Manipulator domain."""
+
+    def action_spec(self):
+        """ override base class action_spec """
+        return robot.action_spec(self)
+
+
+
+class Jaco(base.Task):
+    """A Bring `Task`: bring the prop to the target."""
+
+    def __init__(self, target_size, fully_observable=True, random=None):
+        """Initialize an instance of `Jaco`.
+
+    Args:
+      target_size: A `float`, tolerance to determine whether finger reached the
+          target.
+      fully_observable: A `bool`, whether the observation should contain the
+        position and velocity of the object being manipulated and the target
+        location.
+      random: Optional, either a `numpy.random.RandomState` instance, an
+        integer seed for creating a new `RandomState`, or None to select a seed
+        automatically (default).
+    """
+        self._target_size = target_size
+        self._fully_observable = fully_observable
+        super(Jaco, self).__init__(random=random)
+
+    def action_spec(self, physics):
+        print('getting action spec')
+        return physics.action_spec()
 
     def bounded_joint_pos(self, joint_names):
         """Returns joint positions as (sin, cos) values."""
@@ -87,30 +123,6 @@ class Physics(mujoco.Physics):
         return np.linalg.norm(self.finger_to_target())
 
 
-class Jaco(base.Task):
-    """A Bring `Task`: bring the prop to the target."""
-
-    def __init__(self, target_size, fully_observable=True, random=None):
-        """Initialize an instance of `Jaco`.
-
-    Args:
-      target_size: A `float`, tolerance to determine whether finger reached the
-          target.
-      fully_observable: A `bool`, whether the observation should contain the
-        position and velocity of the object being manipulated and the target
-        location.
-      random: Optional, either a `numpy.random.RandomState` instance, an
-        integer seed for creating a new `RandomState`, or None to select a seed
-        automatically (default).
-    """
-        self._target_size = target_size
-        self._fully_observable = fully_observable
-        super(Jaco, self).__init__(random=random)
-
-    def action_spec(self, physics):
-        print('getting action spec')
-        return physics.action_spec()
-
     def initialize_episode(self, physics):
         """Sets the state of the environment at the start of each episode."""
         # Local aliases
@@ -145,9 +157,9 @@ class Jaco(base.Task):
         # """Returns either features or only sensors (to be used with pixels)."""
         obs = collections.OrderedDict()
         # jaco_joint_1 thru 6 and jaco_joint_finger_1 thru 3 list shaped (9,2)
-        obs['arm_pos'] = physics.bounded_joint_pos(_ARM_JOINTS)
+        obs['arm_pos'] = self.bounded_joint_pos(_ARM_JOINTS)
         # arm vel is shape (9,)
-        obs['arm_vel'] = physics.joint_vel(_ARM_JOINTS)
+        obs['arm_vel'] = self.joint_vel(_ARM_JOINTS)
         if self._fully_observable:
             # hand pos is shape (7,)
             obs['hand_pos'] = physics.body_pose('jaco_link_hand')

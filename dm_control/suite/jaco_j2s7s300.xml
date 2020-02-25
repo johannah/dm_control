@@ -1,5 +1,5 @@
 <mujoco model="j2s7s300">
-    <compiler angle="radian" meshdir="kinova_meshes/" />
+    <compiler angle="radian" meshdir="common/kinova_meshes/" />
   <option integrator="RK4" solver="PGS" timestep="0.001" gravity="0 0 0" iterations="50"/>
 
     <size njmax="500" nconmax="100" />

@@ -1,4 +1,5 @@
 <mujoco model="j2s7s300">
+<! the j2s7s300 publishes its joint state at about 52 Hz wo optimization. Mujoco was unstable when timestep was gt .001. If we set gravity to -9.81 in the z dim, we aren't able to treat the controllers the same as we do the real robot (0 velocity results in no movement).  />
     <compiler angle="radian" meshdir="common/kinova_meshes/" />
   <option integrator="RK4" solver="PGS" timestep="0.001" gravity="0 0 0" iterations="50"/>
 
@@ -14,6 +15,9 @@
         <mesh name="hand_3finger" file="hand_3finger.STL" />
         <mesh name="finger_proximal" file="finger_proximal.STL" />
         <mesh name="finger_distal" file="finger_distal.STL" />
+
+<texture name="groundplane" type="2d" builtin="checker" rgb1=".25 .26 .25"
+      rgb2=".22 .22 .22" width="100" height="100" mark="none" markrgb=".8 .8 .8"/>
     </asset>
 
  <default>
@@ -30,7 +34,15 @@
     </default>
   </default>
     <worldbody>
+ <light cutoff="200" diffuse="1.2 1.2 1.2" dir="-0 0 -1.3" directional="true" exponent="1" pos="0 0 1.3" specular=".1 .1 .1"/>
+
+     <camera name="view1" pos="0 0 2.0" zaxis="0 0 1" fovy="45" ipd="0.068"/>
+    <camera name="view2" pos="1.0 0.7 0.3" xyaxes="-1 1 0 0 0 1" fovy="45" ipd="0.068"/>
+
+	
+ <geom name="ground" class="ground" type='plane' pos="0 0 0" rgba="0.19 0.30 0.23 1" size="2 2 1"/>
         <geom type="mesh" rgba="0.17 0.17 0.17 1" mesh="base" />
+
         <body name="jaco_link_1" pos="0 0 0.15675" quat="0 0 1 0">
             <inertial pos="0 -0.002 -0.0605" mass="0.7477" diaginertia="0.00152032 0.00152032 0.00059816" />
             <joint name="jaco_joint_1" pos="0 0 0" axis="0 0 1" limited="true" range="-6.28319 6.28319" />

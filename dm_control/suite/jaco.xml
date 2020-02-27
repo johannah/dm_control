@@ -28,6 +28,7 @@
 
   <asset>
     <mesh file="jaco_link_base.stl"/>
+    <mesh file="jaco_base.stl"/>
     <mesh file="jaco_link_1.stl"/>
     <mesh file="jaco_link_2.stl"/>
     <mesh file="jaco_link_3.stl"/>

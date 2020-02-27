@@ -4,15 +4,15 @@
 
     <size njmax="500" nconmax="100" />
     <asset>
-        <mesh name="base" file="base.STL" />
-        <mesh name="shoulder" file="shoulder.STL" />
-        <mesh name="arm" file="arm.STL" />
-        <mesh name="forearm" file="forearm.STL" />
-        <mesh name="wrist_spherical_1" file="wrist_spherical_1.STL" />
-        <mesh name="wrist_spherical_2" file="wrist_spherical_2.STL" />
-        <mesh name="hand_3finger" file="hand_3finger.STL" />
-        <mesh name="finger_proximal" file="finger_proximal.STL" />
-        <mesh name="finger_distal" file="finger_distal.STL" />
+        <mesh name="base" file="base.stl" />
+        <mesh name="shoulder" file="shoulder.stl" />
+        <mesh name="arm" file="arm.stl" />
+        <mesh name="forearm" file="forearm.stl" />
+        <mesh name="wrist_spherical_1" file="wrist_spherical_1.stl" />
+        <mesh name="wrist_spherical_2" file="wrist_spherical_2.stl" />
+        <mesh name="hand_3finger" file="hand_3finger.stl" />
+        <mesh name="finger_proximal" file="finger_proximal.stl" />
+        <mesh name="finger_distal" file="finger_distal.stl" />
 
 <texture name="groundplane" type="2d" builtin="checker" rgb1=".25 .26 .25"
       rgb2=".22 .22 .22" width="100" height="100" mark="none" markrgb=".8 .8 .8"/>

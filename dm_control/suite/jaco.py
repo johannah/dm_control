@@ -19,7 +19,7 @@ import numpy as np
 
 # the kinova jaco2 ros exposes the joint state at ~52Hz
 #_CONTROL_TIMESTEP = .02
-_DEFAULT_TIME_LIMIT = 30
+_DEFAULT_TIME_LIMIT = 100
 #_DEFAULT_TIME_LIMIT = 5
 #_BIG_TARGET = .05
 SUITE = containers.TaggedTasks()
@@ -50,7 +50,7 @@ def easy(xml_name='jaco_j2s7s300.xml', time_limit=_DEFAULT_TIME_LIMIT, random_se
     n_joints, joint_names = get_joint_names(xml_name)
     test_target_flag=True
     physics = MujocoPhysics.from_xml_string(*get_model_and_assets(xml_name))
-    task = Jaco(n_joints, joint_names, target_size=.05, test_target_flag=test_target_flag, fully_observable=fully_observable, random_seed=random_seed)
+    task = Jaco(n_joints, joint_names, target_size=.08, test_target_flag=test_target_flag, fully_observable=fully_observable, random_seed=random_seed)
     environment_kwargs = environment_kwargs or {}
     return control.Environment(
         physics, task, time_limit=time_limit, **environment_kwargs)
@@ -140,8 +140,7 @@ class Jaco(base.Task):
         self.random_state = np.random.RandomState(random_seed)
         self._fully_observable = fully_observable
         self.joint_names = joint_names
-        #self.target_position = np.array([.5,.2,.2])
-        self.target_position = np.array([.5,.5,.2])
+        self.target_position = np.array([.25,.25,.2])
         self.test_target_flag = test_target_flag
         super(Jaco, self).__init__()
 
@@ -185,8 +184,10 @@ class Jaco(base.Task):
         obs = collections.OrderedDict()
         obs['arm_pos'] = physics.bounded_joint_pos(self.joint_names)
         obs['arm_vel'] = physics.joint_vel(self.joint_names)
-        obs['to_target'] = self.finger_to_target_distance(physics)
         obs['target_pos'] = self.target_position
+        obs['finger_pos'] = physics.get_joint_position(['jaco_link_finger_tip_1'])
+        obs['finger_rel'] = obs['target_pos']-obs['finger_pos']
+        obs['to_target'] = self.finger_to_target_distance(physics)
         return obs
 
     def get_reward(self, physics):

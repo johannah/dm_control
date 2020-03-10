@@ -19,7 +19,7 @@ import numpy as np
 
 # the kinova jaco2 ros exposes the joint state at ~52Hz
 #_CONTROL_TIMESTEP = .02
-_DEFAULT_TIME_LIMIT = 100
+_DEFAULT_TIME_LIMIT = 10
 #_DEFAULT_TIME_LIMIT = 5
 #_BIG_TARGET = .05
 SUITE = containers.TaggedTasks()
@@ -50,10 +50,11 @@ def easy(xml_name='jaco_j2s7s300.xml', time_limit=_DEFAULT_TIME_LIMIT, random_se
     n_joints, joint_names = get_joint_names(xml_name)
     test_target_flag=True
     physics = MujocoPhysics.from_xml_string(*get_model_and_assets(xml_name))
-    task = Jaco(n_joints, joint_names, target_size=.08, test_target_flag=test_target_flag, fully_observable=fully_observable, random_seed=random_seed)
+    task = Jaco(n_joints, joint_names, target_size=.1, test_target_flag=test_target_flag, fully_observable=fully_observable, random_seed=random_seed)
     environment_kwargs = environment_kwargs or {}
+    # set n_sub_steps to repeat the action. since control_ts is at 1000 hz and real robot control ts is 50 hz, we repeat the action 20 times 
     return control.Environment(
-        physics, task, time_limit=time_limit, **environment_kwargs)
+        physics, task, time_limit=time_limit, control_timestep=.02, **environment_kwargs)
 
 class MujocoPhysics(mujoco.Physics):
     """Physics with additional features for the Planar Manipulator domain."""

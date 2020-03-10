@@ -44,7 +44,7 @@ def get_model_and_assets(xml_name):
 
 
 @SUITE.add('benchmarking', 'easy')
-def easy(xml_name='jaco_j2s7s300.xml', time_limit=_DEFAULT_TIME_LIMIT, random_seed=None, fully_observable=True, environment_kwargs=None):
+def easy(xml_name='jaco_j2s7s300.xml', random_seed=None, time_limit=_DEFAULT_TIME_LIMIT, fully_observable=True, environment_kwargs=None):
     """Returns reacher with sparse reward with 5e-2 tol and randomized target."""
     # hacky way to get joints
     n_joints, joint_names = get_joint_names(xml_name)
@@ -52,7 +52,7 @@ def easy(xml_name='jaco_j2s7s300.xml', time_limit=_DEFAULT_TIME_LIMIT, random_se
     physics = MujocoPhysics.from_xml_string(*get_model_and_assets(xml_name))
     task = Jaco(n_joints, joint_names, target_size=.1, test_target_flag=test_target_flag, fully_observable=fully_observable, random_seed=random_seed)
     environment_kwargs = environment_kwargs or {}
-    # set n_sub_steps to repeat the action. since control_ts is at 1000 hz and real robot control ts is 50 hz, we repeat the action 20 times 
+    # set n_sub_steps to repeat the action. since control_ts is at 1000 hz and real robot control ts is 50 hz, we repeat the action 20 times
     return control.Environment(
         physics, task, time_limit=time_limit, control_timestep=.02, **environment_kwargs)
 

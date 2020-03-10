@@ -204,7 +204,6 @@ class Physics(_control.Physics):
       pass
 
   def reset(self):
-      embed()
       self.data = self.robot_client.send("RSET_")
 
   def after_reset(self):

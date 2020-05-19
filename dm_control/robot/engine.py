@@ -68,10 +68,13 @@ _OVERLAYS_NOT_SUPPORTED_FOR_DEPTH_OR_SEGMENTATION = (
     'Overlays are not supported with depth or segmentation rendering.')
 
 class RobotClient():
-    def __init__(self, robot_ip="127.0.0.1", port=9100):
+    def __init__(self, robot_ip="127.0.0.1", port=9030):
         self.robot_ip = robot_ip
         self.port = port
         self.connected = False
+        self.startseq = '<|'
+        self.endseq = '<|'
+        self.midseq = '**'
 
     def connect(self):
         while not self.connected:
@@ -84,274 +87,32 @@ class RobotClient():
             if not self.connected:
                 time.sleep(1)
 
-    def send(self, data):
-        print('sending', data)
-        self.tcp_socket.sendall(data)
-        rx = self.tcp_socket.recv(1024)
-        print('rx', rx)
+    def send(self, cmd, msg='XX'):
+        packet = self.startseq+cmd+self.midseq+msg+self.endseq
+        self.tcp_socket.sendall(packet)
+        rx = self.tcp_socket.recv(2048)
         return rx
 
-    def disconnect(self):
-        self.send('close')
+    def home(self):
+        return self.send('HOME')
+
+    def reset(self):
+        return self.send('RESET')
+
+    def get_state(self):
+        return self.send('GET_STATE')
+
+    def step(self, command_type, relative, unit, data):
+        assert(command_type in ['VEL', 'POSE'])
+        datastr = ','.join(['%.4f'%x for x in data])
+        data = '{},{},{},{}'.format(command_type, relative, unit, datastr)
+        return self.send('STEP', data)
+
+    def end(self):
+        self.send('END')
         print('disconnected from {}'.format(self.robot_ip))
         self.tcp_socket.close()
         self.connected = False
-
-class Physics(_control.Physics):
-  """Encapsulates a robot.
-
-  A robot model is typically defined by an MJCF XML file [0]
-
-  ```python
-  physics = Physics.from_xml_path('/path/to/model.xml')
-
-  with physics.reset_context():
-    physics.named.data.qpos['hinge'] = np.random.rand()
-
-  # Apply controls and advance the robot state.
-  physics.set_control(np.random.random_sample(size=N_ACTUATORS))
-  physics.step()
-
-  # Render a camera defined in the XML file to a NumPy array.
-  rgb = physics.render(height=240, width=320, id=0)
-  ```
-
-  [0] http://www.mujoco.org/book/modeling.html
-  """
-
-  _contexts = None
-
-  def __new__(cls, *args, **kwargs):
-    obj = super(Physics, cls).__new__(cls)
-    # The lock is created in `__new__` rather than `__init__` because there are
-    # a number of existing subclasses that override `__init__` without calling
-    # the `__init__` method of the  superclass.
-    #obj._contexts_lock = threading.Lock()  # pylint: disable=protected-access
-    return obj
-
-  def __init__(self, robot_client):
-    """Initializes a new robot instance.
-
-    Args:
-        robot_client: connection to robot over tcp
-    """
-    self.robot_client = robot_client
-    self.reset()
-
-  @classmethod
-  def from_cfg(cls, cfg_path):
-    rclient = RobotClient()
-    rclient.connect()
-    return cls(rclient)
-
-  def enable_profiling(self):
-    """should enable timing profiling."""
-    pass
-
-  def set_control(self, control):
-    """Sets the control signal for the actuators.
-
-    Args:
-      control: NumPy array or array-like actuation values.
-    """
-    if self.robot.set_control(control):
-        self.data.ctrl = control
-        return True
-    else:
-        return False
-
-  def step(self):
-    """Advances physics with up-to-date position and velocity dependent fields.
-
-    The actuation can be updated by calling the `set_control` function first.
-    """
-    # In the case of Euler integration we assume mj_step1 has already been
-    # called for this state, finish the step with mj_step2 and then update all
-    # position and velocity related fields with mj_step1. This ensures that
-    # (most of) mjData is in sync with qpos and qvel. In the case of non-Euler
-    # integrators (e.g. RK4) an additional mj_step1 must be called after the
-    # last mj_step to ensure mjData syncing.
-    with self.check_invalid_state():
-      self.robot.step(self.data.ctrl)
-
-  def get_state(self):
-    """Returns the physics state.
-
-    Returns:
-      NumPy array containing full state.
-    """
-    state = self.robot.get_state()
-    return state
-
-  def set_state(self, physics_state):
-    """Sets the physics state.
-
-    Args:
-      physics_state: NumPy array containing the full state.
-
-    Raises:
-      ValueError: If `state` has invalid size.
-    """
-    state_items = self._physics_state_items()
-
-    expected_shape = (sum(item.size for item in state_items),)
-    if expected_shape != physics_state.shape:
-      raise ValueError('Input physics state has shape {}. Expected {}.'.format(
-          physics_state.shape, expected_shape))
-    self.robot.set_state(physics_state)
-
-  def copy(self, share_model=False):
-      pass
-
-  def reset(self):
-      self.data = self.robot_client.send("RSET_")
-
-  def after_reset(self):
-    """Runs after resetting internal variables of the physics simulation."""
-    ## Disable actuation since we don't yet have meaningful control inputs.
-    #with self.model.disable('actuation'):
-    #  self.forward()
-
-  def forward(self):
-    """Recomputes the forward dynamics without advancing the simulation."""
-    # Note: `mj_forward` differs from `mj_step1` in that it also recomputes
-    # quantities that depend on acceleration (and therefore on the state of the
-    # controls). For example `mj_forward` updates accelerometer and gyro
-    # readings, whereas `mj_step1` does not.
-    # http://www.mujoco.org/book/programming.html#siForward
-    #with self.check_invalid_state():
-    #  mjlib.mj_forward(self.model.ptr, self.data.ptr)
-
-  @contextlib.contextmanager
-  def check_invalid_state(self):
-    """Raises a `base.PhysicsError` if the simulation state is invalid."""
-    # `np.copyto(dst, src)` is marginally faster than `dst[:] = src`.
-    #np.copyto(self._warnings_before, self._warnings)
-    #yield
-    #np.greater(self._warnings, self._warnings_before, out=self._new_warnings)
-    #if any(self._new_warnings):
-    #  warning_names = np.compress(self._new_warnings, enums.mjtWarning._fields)
-    #  raise _control.PhysicsError(
-    #      _INVALID_PHYSICS_STATE.format(warning_names=', '.join(warning_names)))
-
-  def __getstate__(self):
-    return self.data  # All state is assumed to reside within `self.data`.
-
-#  def __setstate__(self, data):
-#    # Note: `_contexts_lock` is normally created in `__new__`, but `__new__` is
-#    #       not invoked during unpickling.
-#    #self._contexts_lock = threading.Lock()
-#    self._reload_from_data(data)
-
-#  def _reload_from_data(self, data):
-#    """Initializes a new or existing `Physics` instance from a `wrapper.MjData`.
-#
-#    Assigns all attributes, sets up named indexing, and creates rendering
-#    contexts if rendering is enabled.
-#
-#    The default constructor as well as the other `reload_from` methods should
-#    delegate to this method.
-#
-#    Args:
-#      data: Instance of `wrapper.MjData`.
-#    """
-#    print(data)
-#    self._data = data
-#
-#    # Performance optimization: pre-allocate numpy arrays used when checking for
-#    # MuJoCo warnings on each step.
-#    self._warnings = self.data.warning.number
-#    self._warnings_before = np.empty_like(self._warnings)
-#    self._new_warnings = np.empty(dtype=bool, shape=self._warnings.shape)
-#
-#    # Forcibly free any previous GL context in order to avoid problems with GL
-#    # implementations that do not support multiple contexts on a given device.
-#    #with self._contexts_lock:
-#    #  if self._contexts:
-#    #    self._free_rendering_contexts()
-#
-#    # Call kinematics update to enable rendering.
-#    try:
-#      self.after_reset()
-#    except _control.PhysicsError as e:
-#      logging.warning(e)
-#
-#    # Set up named indexing.
-#    axis_indexers = index.make_axis_indexers(self.model)
-#    self._named = NamedIndexStructs(
-#        data=index.struct_indexer(self.data, 'data', axis_indexers),)
-#
-#  def from_model(cls, model):
-#      data = wrapper.MjData(model)
-
-  @property
-  def named(self):
-    return self._named
-
-#  @property
-#  def contexts(self):
-#    """Returns a `Contexts` namedtuple, used in `Camera`s and rendering code."""
-#    with self._contexts_lock:
-#      if not self._contexts:
-#        self._make_rendering_contexts()
-#    return self._contexts
-
-  @property
-  def model(self):
-    return self._data.model
-
-  @property
-  def data(self):
-    return self._data
-
-#  def _physics_state_items(self):
-#    """Returns list of arrays making up internal physics simulation state.
-#
-#    The physics state consists of the state variables, their derivatives and
-#    actuation activations.
-#
-#    Returns:
-#      List of NumPy arrays containing full physics simulation state.
-#    """
-#    return [self.data.qpos, self.data.qvel, self.data.act]
-
-  # Named views of simulation data.
-
-  def control(self):
-    """Returns a copy of the control signals for the actuators."""
-    return self.data.ctrl.copy()
-
-  def activation(self):
-    """Returns a copy of the internal states of actuators.
-
-    For details, please refer to
-    http://www.mujoco.org/book/computation.html#geActuation
-
-    Returns:
-      Activations in a numpy array.
-    """
-    return self.data.act.copy()
-
-  def state(self):
-    """Returns the full physics state. Alias for `get_physics_state`."""
-    return np.concatenate(self._physics_state_items())
-
-  def position(self):
-    """Returns a copy of the generalized positions (system configuration)."""
-    return self.data.qpos.copy()
-
-  def velocity(self):
-    """Returns a copy of the generalized velocities."""
-    return self.data.qvel.copy()
-
-  def timestep(self):
-    """Returns the simulation timestep."""
-    return self.model.opt.timestep
-
-  def time(self):
-    """Returns episode time in seconds."""
-    return self.data.time
-
 
 #class Camera(object):
 #  """ scene camera.
@@ -704,14 +465,3 @@ class Physics(_control.Physics):
 #                      context)
 #
 
-def action_spec(physics):
-  """Returns a `BoundedArraySpec` matching the `physics` actuators."""
-  num_actions = physics.model.nu
-  is_limited = physics.model.actuator_ctrllimited.ravel().astype(np.bool)
-  control_range = physics.model.actuator_ctrlrange
-  minima = np.full(num_actions, fill_value=-np.inf, dtype=np.float)
-  maxima = np.full(num_actions, fill_value=np.inf, dtype=np.float)
-  minima[is_limited], maxima[is_limited] = control_range[is_limited].T
-
-  return specs.BoundedArray(
-      shape=(num_actions,), dtype=np.float, minimum=minima, maximum=maxima)

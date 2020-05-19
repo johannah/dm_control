@@ -158,11 +158,9 @@ class MujocoPhysics(mujoco.Physics):
             raise
 
 
-    #def action_spec(self):
-    #    """ override base class action_spec """
-    #    return mujoco.action_spec(self)
-
     def set_robot_position_home(self):
+        # TODO - should we ensure that the home position is within the fence? 
+        #  we should setup walls in the xml sim
         self.set_robot_position(self.home_joint_angles)
 
     def set_robot_position(self, body_angles):

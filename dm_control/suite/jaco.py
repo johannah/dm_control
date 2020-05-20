@@ -41,6 +41,14 @@ assert maxx>minx
 assert maxy>miny
 assert maxz>minz
 
+#D1 Base to shoulder 0.2755
+#D2 First half upper arm length 0.2050
+#D3 Second half upper arm length 0.2050
+#D4 Forearm length (elbow to wrist) 0.2073
+#D5 First wrist length 0.1038
+#D6 Second wrist length 0.1038
+#D7 Wrist to center of the hand 0.1600
+#e2 Joint 3-4 lateral offset 0.0098
 # TODO use xml as fence
 def trim_target_pose_safety(position):
     """

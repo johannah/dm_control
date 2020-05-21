@@ -90,9 +90,7 @@ def get_joint_names(xml_name):
         n_joints = 6
     else:
         raise
-    joint_names = (['jaco_joint_{}'.format(i + 1) for i in range(n_joints)] +
-                   ['jaco_joint_finger_{}'.format(i + 1) for i in range(3)] +
-                   ['jaco_joint_finger_tip_{}'.format(i + 1) for i in range(3)])
+    joint_names = (['jaco_joint_{}'.format(i + 1) for i in range(n_joints)])
     return n_joints, joint_names
 
 def get_model_and_assets(xml_name):
@@ -127,16 +125,12 @@ class MujocoPhysics(mujoco.Physics):
         self.joint_names = joint_names
         if self.n_joints == 7:
             # approx loc on home on real 7dof jaco2 robot
-            self.home_joint_angles = [1.5722468174826083, 
-                                      3.6631581056958162, 
-                                      3.144652093050076,
-                                      0.4417864669110646, 
-                                      6.280110954017199, 
-                                      3.724487776123142, 
-                                      3.136988847013373,
-                                      0.0012319971190548208, 
-                                      0.0012319971190548208, 
-                                      0.0012319971190548208, 0.0, 0.0, 0.0]
+            self.home_joint_angles = [4.71, 
+                                      2.61, 
+                                      0,
+                                      .5, 
+                                      6.28, 
+                                      3.7, 3.14] 
             """
              after home - xpos is
              In [11]: physics.named.data.xpos

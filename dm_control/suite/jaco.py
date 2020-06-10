@@ -50,24 +50,31 @@ def DHtransform(d,theta,a,alpha):
     T = np.vstack((np.hstack((rotation_matrix, translation)), last_row))
     return T
 
-def trim_target_pose_safety(position):
+def trim_and_check_pose_safety(position):
     """
     take in a position list [x,y,z] and ensure it doesn't violate the defined fence
     """
     x,y,z = position
+    hit = False
     if jaco_fence.maxx < x:
         x = jaco_fence.maxx
+        hit = True
     if x < jaco_fence.minx:
         x = jaco_fence.minx
+        hit = True
     if jaco_fence.maxy < y:
         y = jaco_fence.maxy
+        hit = True
     if y < jaco_fence.miny:
         y = jaco_fence.miny
+        hit = True
     if jaco_fence.maxz < z:
         z = jaco_fence.maxz
+        hit = True
     if z < jaco_fence.minz:
         z = jaco_fence.minz
-    return [x,y,z]
+        hit = True
+    return [x,y,z], hit
 
 def get_model_and_assets(xml_name):
     """Returns a tuple containing the model XML string and a dict of assets."""
@@ -325,7 +332,7 @@ class Jaco(base.Task):
         # determine where robot end effector is now
         x, y, z = physics.get_tool_pose()
         # ensure target is within fence
-        target_pose = trim_target_pose_safety([x+x_target_off, y+y_target_off, z+z_target_off])
+        target_pose,_ = trim_and_check_pose_safety([x+x_target_off, y+y_target_off, z+z_target_off])
         physics.named.model.geom_pos['target', 'x'] = target_pose[0] 
         physics.named.model.geom_pos['target', 'y'] = target_pose[1] 
         physics.named.model.geom_pos['target', 'z'] = target_pose[2] 
@@ -333,11 +340,29 @@ class Jaco(base.Task):
         #TODO - will need to use tool pose rather than finger
         super(Jaco, self).initialize_episode(physics)
 
+    def before_step(self, action, physics):
+        joint_extremes = self._find_joint_coordinate_extremes(action[:self.DOF])
+        self.safe_step = True
+        for xx,joint_xyz in enumerate(joint_extremes):
+            good_xyz, hit = trim_and_check_pose_safety(joint_xyz)
+            if hit:
+                print('joint {} will hit at ({},{},{}) at requested joint position - blocking action'.format(self.extreme_joints[xx], *good_xyz))
+                # the requested position is out of bounds of the fence, do not perform the action
+                self.safe_step = False
+
+        if self.safe_step:
+            print(joint_xyz)
+            super(Jaco, self).before_step(action, physics)
+        
+    def step(self, action, physics):
+        if self.safe_step:
+            super(Jaco, self).step(action, physics)
+
     def get_observation(self, physics):
         """Returns either features or only sensors (to be used with pixels)."""
         obs = collections.OrderedDict()
-        # joint position starts as all zeros 
         joint_angles = physics.get_joint_angles_radians()
+        # joint position starts as all zeros 
         joint_extremes = self._find_joint_coordinate_extremes(joint_angles[:self.DOF])
         obs['timestep'] = physics.get_timestep()
         obs['to_target'] = self.target_pose-joint_extremes[-1]
@@ -345,10 +370,6 @@ class Jaco(base.Task):
         obs['joint_forces'] = physics.get_actuator_force()
         obs['joint_velocity'] = physics.get_actuator_velocity()
         obs['joint_extremes'] = joint_extremes
-
-        obs['joint_positions'] = np.array([physics.named.data.xpos['jaco_link_%s'%x] for x in range(1,self.DOF+1)])
-        #obs['coordinates'] = physics.get_joint_coordinates()
-        # TODO not sure if fully observable is right - prob worth thinking about more
         return obs
 
     def get_distance(self, position_1, position_2):

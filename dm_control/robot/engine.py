@@ -37,14 +37,9 @@ import contextlib
 import threading
 
 from absl import logging
-
-from dm_control import _render
-from dm_control.mujoco import index
-#from dm_control.mujoco import wrapper
-from dm_control.mujoco.wrapper import util
-#from dm_control.mujoco.wrapper.mjbindings import enums
-#from dm_control.mujoco.wrapper.mjbindings import mjlib
-#from dm_control.mujoco.wrapper.mjbindings import types
+#from dm_control import _render
+#from dm_control.mujoco import index
+#from dm_control.mujoco.wrapper import util
 from dm_control.rl import control as _control
 from dm_env import specs
 
@@ -52,67 +47,61 @@ import numpy as np
 import six
 import time
 from IPython import embed
-#Contexts = collections.namedtuple('Contexts', ['gl', 'mujoco'])
-Selected = collections.namedtuple(
-    'Selected', ['body', 'geom', 'skin', 'world_position'])
-NamedIndexStructs = collections.namedtuple(
-   'NamedIndexStructs', ['model', 'data'])
-Pose = collections.namedtuple(
-    'Pose', ['lookat', 'distance', 'azimuth', 'elevation'])
-
-_BOTH_SEGMENTATION_AND_DEPTH_ENABLED = (
-    '`segmentation` and `depth` cannot both be `True`.')
-_INVALID_PHYSICS_STATE = (
-    'Physics state is invalid. Warning(s) raised: {warning_names}')
-_OVERLAYS_NOT_SUPPORTED_FOR_DEPTH_OR_SEGMENTATION = (
-    'Overlays are not supported with depth or segmentation rendering.')
 
 class RobotClient():
-    def __init__(self, robot_ip="127.0.0.1", port=9030):
-        self.robot_ip = robot_ip
-        self.port = port
-        self.connected = False
-        self.startseq = '<|'
-        self.endseq = '<|'
-        self.midseq = '**'
+  def __init__(self, robot_ip="127.0.0.1", port=9030):
+    self.robot_ip = robot_ip
+    self.port = port
+    self.connected = False
+    self.startseq = '<|'
+    self.endseq = '|>'
+    self.midseq = '**'
 
-    def connect(self):
-        while not self.connected:
-            print("attempting to connect with robot at {}".format(self.robot_ip))
-            self.tcp_socket = socket.socket(socket.AF_INET,socket.SOCK_STREAM)
-            # connect to computer
-            self.tcp_socket.connect((self.robot_ip, self.port))
-            print('connected')
-            self.connected = True
-            if not self.connected:
-                time.sleep(1)
+  def connect(self):
+    while not self.connected:
+      print("attempting to connect with robot at {}".format(self.robot_ip))
+      self.tcp_socket = socket.socket(socket.AF_INET,socket.SOCK_STREAM)
+      # connect to computer
+      self.tcp_socket.connect((self.robot_ip, self.port))
+      print('connected')
+      self.connected = True
+      if not self.connected:
+        time.sleep(1)
 
-    def send(self, cmd, msg='XX'):
-        packet = self.startseq+cmd+self.midseq+msg+self.endseq
-        self.tcp_socket.sendall(packet)
-        rx = self.tcp_socket.recv(2048)
-        return rx
+  def send(self, cmd, msg='XX'):
+    packet = self.startseq+cmd+self.midseq+msg+self.endseq
+    self.tcp_socket.sendall(packet.encode())
+    # TODO - should prob handle larger packets
+    rx = self.tcp_socket.recv(2048).decode()
+    print("rx", rx)
+    return rx
 
-    def home(self):
-        return self.send('HOME')
+  def home(self):
+    return self.send('HOME')
 
-    def reset(self):
-        return self.send('RESET')
+  def reset(self):
+    return self.send('RESET')
 
-    def get_state(self):
-        return self.send('GET_STATE')
+  def get_state(self):
+    return self.send('GET_STATE')
 
-    def step(self, command_type, relative, unit, data):
-        assert(command_type in ['VEL', 'POSE'])
-        datastr = ','.join(['%.4f'%x for x in data])
-        data = '{},{},{},{}'.format(command_type, relative, unit, datastr)
-        return self.send('STEP', data)
+  def initialize(self, minx, maxx, miny, maxy, minz, maxz):
+    data = '{},{},{},{},{},{}'.format(minx,maxx, 
+                                      miny,maxy, 
+                                      minz,maxz)
+    self.send('INIT', data)
 
-    def end(self):
-        self.send('END')
-        print('disconnected from {}'.format(self.robot_ip))
-        self.tcp_socket.close()
-        self.connected = False
+  def step(self, command_type, relative, unit, data):
+    assert(command_type in ['VEL', 'ANGLE', 'TOOL'])
+    datastr = ','.join(['%.4f'%x for x in data])
+    data = '{},{},{},{}'.format(command_type, relative, unit, datastr)
+    return self.send('STEP', data)
+
+  def end(self):
+    self.send('END')
+    print('disconnected from {}'.format(self.robot_ip))
+    self.tcp_socket.close()
+    self.connected = False
 
 #class Camera(object):
 #  """ scene camera.

@@ -30,7 +30,7 @@
 
     <!-- damping=10 keeps joints from shaking with position controllers! -->
 
-    <joint limited="false" damping="10" armature=".01"/>
+    <joint limited="false" damping="5" armature=".01"/>
 
     <default class ="vizNcoll">
       <geom material="MatViz" type="mesh" condim="3" contype="1" conaffinity="1" margin="0.001"/>
@@ -175,6 +175,7 @@ I'm not sure about kv. kv=55 was too high and caused instability. kv=25 seems to
 I tried using only position actuators, but the simulation was shaky, so leaving in the velocity actuators
 
 If the gain is too high, the simulation seems to collapse
+I think the vel range may be too low - 100 deg per sec on joint 7 is really slow at 100hz
 -->
 <!--
   <actuator>
@@ -201,13 +202,13 @@ If the gain is too high, the simulation seems to collapse
   ~10 damping is important or the limbs shake
   kp should be around 55 for position actuators - too high and things become unstable-->
   <actuator>
-  <position joint='jaco_joint_1'  name='pos_act_1' kp="55"  ctrlrange='-628 628' ctrllimited='true'/>
+  <position joint='jaco_joint_1'  name='pos_act_1' kp="55"  ctrlrange='-6.28 6.28' ctrllimited='true'/>
     <position joint='jaco_joint_2'  name='pos_act_2' kp="55" ctrlrange='.8 5.46' ctrllimited='true'/>
-    <position joint='jaco_joint_3'  name='pos_act_3' kp="55" ctrlrange='-628 628' ctrllimited='true'/>
+    <position joint='jaco_joint_3'  name='pos_act_3' kp="55" ctrlrange='-6.28 6.28' ctrllimited='true'/>
     <position joint='jaco_joint_4'  name='pos_act_4' kp="55" ctrlrange='.5 5.759' ctrllimited='true'/>
     <position joint='jaco_joint_5'  name='pos_act_5' kp="5"  ctrlrange='-6.28 6.28' ctrllimited='true'/>
     <position joint='jaco_joint_6'  name='pos_act_6' kp="5"  ctrlrange='1.1344 5.148' ctrllimited='true'/>
-    <position joint='jaco_joint_7'  name='pos_act_7' kp="5"  ctrlrange='-628 628' ctrllimited='true'/>
+    <position joint='jaco_joint_7'  name='pos_act_7' kp="5"  ctrlrange='-6.28 6.28' ctrllimited='true'/>
  </actuator>
     <!-- leave off finger joints for now
     <position joint='jaco_joint_finger_1' kp="15" name='pos_act_finger_1'  ctrlrange="-6.28 6.28" ctrllimited="true"/>

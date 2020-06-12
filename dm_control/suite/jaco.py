@@ -12,7 +12,6 @@ from dm_control.suite import base
 from dm_control.suite import common
 from dm_control.utils import containers
 from dm_control.utils import rewards
-
 from dm_control import robot
 from IPython import embed
 

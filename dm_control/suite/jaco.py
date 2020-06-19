@@ -345,12 +345,11 @@ class Jaco(base.Task):
         for xx,joint_xyz in enumerate(joint_extremes):
             good_xyz, hit = trim_and_check_pose_safety(joint_xyz)
             if hit:
-                print('joint {} will hit at ({},{},{}) at requested joint position - blocking action'.format(self.extreme_joints[xx], *good_xyz))
+                #print('joint {} will hit at ({},{},{}) at requested joint position - blocking action'.format(self.extreme_joints[xx], *good_xyz))
                 # the requested position is out of bounds of the fence, do not perform the action
                 self.safe_step = False
 
         if self.safe_step:
-            print(joint_xyz)
             super(Jaco, self).before_step(action, physics)
         
     def step(self, action, physics):

@@ -5,7 +5,8 @@ from __future__ import division
 from __future__ import print_function
 
 import collections
-
+import dm_env
+from dm_env import specs
 from dm_control import mujoco
 from dm_control.rl import control
 from dm_control.suite import base
@@ -80,21 +81,9 @@ def get_model_and_assets(xml_name):
     return common.read_model(xml_name), common.ASSETS
 
 
-def extract_fence_from_xml(physics):
-    fence_min_x = physics.named.model.geom_pos['low_fence_neg_x', 'x']
-    fence_max_x = physics.named.model.geom_pos['low_fence_pos_x', 'x']
-
-    fence_min_y = physics.named.model.geom_pos['low_fence_neg_y', 'y']
-    fence_max_y = physics.named.model.geom_pos['low_fence_pos_y', 'y']
-
-    fence_min_z = physics.named.model.geom_pos['low_fence_neg_x', 'z']
-    fence_max_z = physics.named.model.geom_pos['high_fence_neg_x', 'z']
-
-
-
 @SUITE.add('benchmarking', 'hard')
 def reacher_hard(xml_name='jaco_j2s7s300_position.xml', random_seed=None, fully_observable=True, environment_kwargs={}):
-    """Returns reacher with sparse reward and randomized target."""
+    """Returns reacher with sparse reward and small/far randomized target and randomized start position."""
     test_target_flag = True
     if 'use_robot' in environment_kwargs.keys():
         physics = RobotPhysics()
@@ -109,7 +98,7 @@ def reacher_hard(xml_name='jaco_j2s7s300_position.xml', random_seed=None, fully_
 
 @SUITE.add('benchmarking', 'medium')
 def reacher_medium(xml_name='jaco_j2s7s300_position.xml', random_seed=None, fully_observable=True, environment_kwargs={}):
-    """Returns reacher with sparse reward and randomized target."""
+    """Returns reacher with sparse reward and small/far randomized target and fixed initial robot position."""
     test_target_flag = True
     if 'use_robot' in environment_kwargs.keys():
         physics = RobotPhysics()
@@ -123,7 +112,7 @@ def reacher_medium(xml_name='jaco_j2s7s300_position.xml', random_seed=None, full
 
 @SUITE.add('benchmarking', 'easy')
 def reacher_easy(xml_name='jaco_j2s7s300_position.xml', random_seed=None, fully_observable=True, environment_kwargs={}):
-    """Returns reacher with sparse reward and randomized target."""
+    """Returns reacher with sparse reward and large/close randomized target and fixed initial robot position."""
     test_target_flag = True
     if 'use_robot' in environment_kwargs.keys():
         physics = RobotPhysics()
@@ -138,20 +127,18 @@ def reacher_easy(xml_name='jaco_j2s7s300_position.xml', random_seed=None, fully_
 class MujocoPhysics(mujoco.Physics):
     """Physics with additional features for the Planar Manipulator domain."""
 
-    """ NOTE when 7dof robot  is completely extended reaching for the sky in mujoco - joints are:
-        [-6.27,3.27,5.17,3.24,0.234,3.54,...]
-        """
 
     def initialize(self):
         # TODO - give robot name here
         # as specified in the xml files
-        # find fence from xml file
-        self.actuators = self.named.data.actuator_velocity.axes.row.names
-        self.n_actuators = len(self.actuators)
-        self.joint_names = self.named.data.qpos.axes.row.names
+        self.actuated_joint_names = self.named.data.qpos.axes.row.names
+        self.n_actuators = len(self.actuated_joint_names)
+        self.n_major_actuators = len([n for n in self.actuated_joint_names if 'finger' not in n])
         # assumes that joints are ordered!
-        self.actuated_joint_names = self.named.data.qpos.axes.row.names[:self.n_actuators]
-        if self.n_actuators == 7:
+        if self.n_major_actuators == 7:
+            """ NOTE when 7dof robot  is completely extended reaching for the sky in mujoco - joints are:
+                [-6.27,3.27,5.17,3.24,0.234,3.54,...]
+                """
             # approx loc on home on real 7dof jaco2 robot
             self.home_joint_angles = [4.71,  # 270 deg
                                       2.61,  # 150 
@@ -159,11 +146,18 @@ class MujocoPhysics(mujoco.Physics):
                                       .5,    # 28 
                                       6.28,  # 360
                                       3.7,   # 212
-                                      3.14]  # 180 
+                                      3.14, # 180
+                                      10, 10, 10, 10, 10, 10]   
+        else:
+            raise ValueError('unknown or unconfigured robot type')
  
-  
     def initialize_episode(self, start_position_function):
         start_position_function()
+
+    def set_pose_of_target(self, target_pose):
+        self.named.model.geom_pos['target', 'x'] = target_pose[0] 
+        self.named.model.geom_pos['target', 'y'] = target_pose[1] 
+        self.named.model.geom_pos['target', 'z'] = target_pose[2] 
 
     def action_spec(self):
         self.initialize()
@@ -181,8 +175,8 @@ class MujocoPhysics(mujoco.Physics):
         self.set_robot_position(self.home_joint_angles)
 
     def set_robot_position(self, body_angles):
-        assert len(body_angles) == len(self.actuated_joint_names)
-        self.named.data.qpos[self.actuated_joint_names] = body_angles
+        # fingers are always last in xml - assume joint angles are for major joints to least major
+        self.named.data.qpos[self.actuated_joint_names[:len(body_angles)]] = body_angles
 
     def get_timestep(self):
         return np.array(self.timestep())
@@ -205,7 +199,7 @@ class MujocoPhysics(mujoco.Physics):
         return physics.render()
 
     def get_tool_pose(self):
-        #TODO - is finger similar enough to tool pose - prob not -- > check kinova docs
+        #TODO - will need to use tool pose rather than finger
         position_finger = self.named.data.xpos['jaco_link_finger_tip_1', ['x', 'y', 'z']]
         return position_finger
 
@@ -255,7 +249,7 @@ class RobotPhysics():
 class Jaco(base.Task):
     """A Bring `Task`: bring the prop to the target."""
 
-    def __init__(self, target_size, max_target_distance=1, start_position='home', degrees_of_freedom=7, extreme_joints=[4,6,7], fully_observable=True, random_seed=None):
+    def __init__(self, target_size, max_target_distance=1, start_position='home', degrees_of_freedom=7, relative_step=True, extreme_joints=[4,6,7], fully_observable=True, random_seed=None):
         """Initialize an instance of `Jaco`.
 
         Args:
@@ -268,6 +262,7 @@ class Jaco(base.Task):
             automatically (default).
         """
         # target + finger size
+        self.relative_step = relative_step
         self.radii = target_size+.01
         self.DOF = degrees_of_freedom
         self.extreme_joints = extreme_joints
@@ -277,9 +272,9 @@ class Jaco(base.Task):
         self.random_state = np.random.RandomState(random_seed)
         self._fully_observable = fully_observable
         self.target_pose = [0, 0, 0]
-        # need to find all joints which have actuators on them
-        # Params for Denavit-Hartenberg Reference Frame Layout (DH)
-        if self.DOF == 7:
+        # 7dof robot has 7 or 13 joints depending on if fingers are included
+        if self.DOF in [7,13]:
+            # Params for Denavit-Hartenberg Reference Frame Layout (DH)
             self.DH_lengths =  {'D1':0.2755, 'D2':0.2050, 'D3':0.2050, 'D4':0.2073, 'D5':0.1038, 'D6':0.1038, 'D7':0.1600, 'e2':0.0098}
 
             # DH transform from joint angle to XYZ from kinova robotics ros code
@@ -298,7 +293,9 @@ class Jaco(base.Task):
         super(Jaco, self).__init__()
 
     def action_spec(self, physics):
-        return physics.action_spec()
+        # could impose relative step size here 
+        spec = physics.action_spec()
+        return specs.BoundedArray(shape=(self.DOF,), dtype=np.float, minimum=spec.minimum[:self.DOF], maximum=spec.maximum[:self.DOF])
 
     def _find_joint_coordinate_extremes(self, major_joint_angles):  
         """calculate xyz positions for joints form cartesian extremes
@@ -320,6 +317,7 @@ class Jaco(base.Task):
             physics.initialize_episode(physics.set_robot_position_home)
         else:
             physics.initialize_episode(physics.set_robot_position_random)
+        self.joint_angles = physics.get_joint_angles_radians()
         physics.named.model.geom_size['target', 0] = self.target_size
         radius = self.random_state.uniform(.01, self.max_target_distance)
         theta_angle = self.random_state.uniform(0, 2*np.pi)
@@ -332,14 +330,17 @@ class Jaco(base.Task):
         x, y, z = physics.get_tool_pose()
         # ensure target is within fence
         target_pose,_ = trim_and_check_pose_safety([x+x_target_off, y+y_target_off, z+z_target_off])
-        physics.named.model.geom_pos['target', 'x'] = target_pose[0] 
-        physics.named.model.geom_pos['target', 'y'] = target_pose[1] 
-        physics.named.model.geom_pos['target', 'z'] = target_pose[2] 
+        physics.set_pose_of_target(self.target_pose)
         self.target_pose = np.array(target_pose)
-        #TODO - will need to use tool pose rather than finger
         super(Jaco, self).initialize_episode(physics)
 
     def before_step(self, action, physics):
+        if self.relative_step:
+            # TODO - ensure this handles angle wraps
+            action = [self.joint_angles[x]+action[x] for x in range(len(action))]
+        # dont requeire all joints 
+        if len(action) < physics.n_actuators:
+            action.extend(self.joint_angles[len(action):])
         joint_extremes = self._find_joint_coordinate_extremes(action[:self.DOF])
         self.safe_step = True
         for xx,joint_xyz in enumerate(joint_extremes):
@@ -359,12 +360,12 @@ class Jaco(base.Task):
     def get_observation(self, physics):
         """Returns either features or only sensors (to be used with pixels)."""
         obs = collections.OrderedDict()
-        joint_angles = physics.get_joint_angles_radians()
+        self.joint_angles = physics.get_joint_angles_radians()
         # joint position starts as all zeros 
-        joint_extremes = self._find_joint_coordinate_extremes(joint_angles[:self.DOF])
+        joint_extremes = self._find_joint_coordinate_extremes(self.joint_angles[:self.DOF])
         obs['timestep'] = physics.get_timestep()
         obs['to_target'] = self.target_pose-joint_extremes[-1]
-        obs['joint_angles'] = joint_angles 
+        obs['joint_angles'] = self.joint_angles 
         obs['joint_forces'] = physics.get_actuator_force()
         obs['joint_velocity'] = physics.get_actuator_velocity()
         obs['joint_extremes'] = joint_extremes

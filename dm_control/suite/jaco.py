@@ -386,12 +386,12 @@ class Jaco(base.Task):
         self.joint_angles = physics.get_joint_angles_radians()
         # joint position starts as all zeros 
         joint_extremes = self._find_joint_coordinate_extremes(self.joint_angles[:self.DOF])
-        obs['timestep'] = physics.get_timestep()
+        #obs['timestep'] = physics.get_timestep()
         obs['to_target'] = self.target_pose-joint_extremes[-1]
         obs['joint_angles'] = self.joint_angles 
         obs['joint_forces'] = physics.get_actuator_force()
         obs['joint_velocity'] = physics.get_actuator_velocity()
-        obs['joint_extremes'] = joint_extremes
+        #obs['joint_extremes'] = joint_extremes
         return obs
 
     def get_distance(self, position_1, position_2):

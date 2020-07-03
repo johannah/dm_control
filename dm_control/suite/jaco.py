@@ -16,15 +16,30 @@ from dm_control.utils import rewards
 from dm_control import robot
 from IPython import embed
 
-import jaco_fence
 import numpy as np
+
+# real robot jo desk
+#jaco_fence_minx = -.20
+#jaco_fence_maxx = .20
+#jaco_fence_miny = -1
+#jaco_fence_maxy = .3
+#jaco_fence_minz = .15
+#jaco_fence_maxz = 1.5
+
+jaco_fence_minx = -200
+jaco_fence_maxx = 200
+jaco_fence_miny = -100
+jaco_fence_maxy = 100
+jaco_fence_minz = .15
+jaco_fence_maxz = 100
 
 # the kinova jaco2 ros exposes the joint state at ~52Hz
 #_DEFAULT_TIME_LIMIT = 10
 _CONTROL_TIMESTEP = .02
 _LONG_EPISODE_TIME_LIMIT = 20
 _SHORT_EPISODE_TIME_LIMIT = 10
-_BIG_TARGET = .07
+_TINY_EPISODE_TIME_LIMIT = 5
+_BIG_TARGET = .2
 _SMALL_TARGET = .015
 
 # size of target in meters
@@ -59,23 +74,23 @@ def trim_and_check_pose_safety(position):
     """
     x,y,z = position
     hit = False
-    if jaco_fence.maxx < x:
-        x = jaco_fence.maxx
+    if jaco_fence_maxx < x:
+        x = jaco_fence_maxx
         hit = True
-    if x < jaco_fence.minx:
-        x = jaco_fence.minx
+    if x < jaco_fence_minx:
+        x = jaco_fence_minx
         hit = True
-    if jaco_fence.maxy < y:
-        y = jaco_fence.maxy
+    if jaco_fence_maxy < y:
+        y = jaco_fence_maxy
         hit = True
-    if y < jaco_fence.miny:
-        y = jaco_fence.miny
+    if y < jaco_fence_miny:
+        y = jaco_fence_miny
         hit = True
-    if jaco_fence.maxz < z:
-        z = jaco_fence.maxz
+    if jaco_fence_maxz < z:
+        z = jaco_fence_maxz
         hit = True
-    if z < jaco_fence.minz:
-        z = jaco_fence.minz
+    if z < jaco_fence_minz:
+        z = jaco_fence_minz
         hit = True
     return [x,y,z], hit
 
@@ -167,6 +182,24 @@ def relative_reacher_easy(xml_name='jaco_j2s7s300_position.xml', random=None, fu
         **environment_kwargs)
 
 
+
+@SUITE.add('benchmarking', 'relative_reacher_baby')
+def relative_reacher_baby(xml_name='jaco_j2s7s300_position.xml', random=None, fully_observable=True, environment_kwargs={}):
+    """Returns reacher with sparse reward and large/close fixed target and fixed initial robot position."""
+    test_target_flag = True
+    if 'use_robot' in environment_kwargs.keys():
+        physics = RobotPhysics()
+    else:
+        physics = MujocoPhysics.from_xml_string(*get_model_and_assets(xml_name))
+        physics.initialize(xml_name, random)
+    task = Jaco(target_size=_BIG_TARGET, max_target_distance=_CLOSE_TARGET_DISTANCE, 
+                start_position='home', fully_observable=fully_observable, random=random, target_type='fixed', target_position=[.2,-.3,.3])
+    # set n_sub_steps to repeat the action. since control_ts is at 1000 hz and real robot control ts is 50 hz, we repeat the action 20 times
+    return control.Environment(
+        physics, task, 
+        control_timestep=_CONTROL_TIMESTEP, time_limit=_TINY_EPISODE_TIME_LIMIT, 
+        **environment_kwargs)
+
 class MujocoPhysics(mujoco.Physics):
     """Physics with additional features for the Planar Manipulator domain."""
 
@@ -181,33 +214,25 @@ class MujocoPhysics(mujoco.Physics):
                 [-6.27,3.27,5.17,3.24,0.234,3.54,...]
                 """
             ## approx loc on home on real 7dof jaco2 robot
-            #self.home_joint_angles = [4.71,  # 270 deg
-            #                          2.61,  # 150 
-            #                          0,     # 0 
-            #                          .5,    # 28 
-            #                          6.28,  # 360
-            #                          3.7,   # 212
-            #                          3.14, # 180
-            #                          10, 10, 10, 10, 10, 10]   
-            # approx loc on home on real 7dof jaco2 robot
             self.home_joint_angles = [4.71,  # 270 deg
                                       2.61,  # 150 
-                                      .5,     # 0 
+                                      0,     # 0 
                                       .5,    # 28 
                                       6.28,  # 360
                                       3.7,   # 212
                                       3.14, # 180
                                       10, 10, 10, 10, 10, 10]   
- 
+            # approx loc on home on real 7dof jaco2 robot
+
         else:
             raise ValueError('unknown or unconfigured robot type')
  
-    def set_pose_of_target(self, target_pose, target_size):
-        print("TARGET AT", target_pose)
+    def set_pose_of_target(self, target_position, target_size):
+        print("TARGET AT", target_position)
         self.named.model.geom_size['target', 0] = target_size
-        self.named.model.geom_pos['target', 'x'] = target_pose[0] 
-        self.named.model.geom_pos['target', 'y'] = target_pose[1] 
-        self.named.model.geom_pos['target', 'z'] = target_pose[2] 
+        self.named.model.geom_pos['target', 'x'] = target_position[0] 
+        self.named.model.geom_pos['target', 'y'] = target_position[1] 
+        self.named.model.geom_pos['target', 'z'] = target_position[2] 
 
     def action_spec(self):
         return mujoco.action_spec(self)
@@ -292,7 +317,7 @@ class RobotPhysics():
 class Jaco(base.Task):
     """A Bring `Task`: bring the prop to the target."""
 
-    def __init__(self, target_size, max_target_distance=1, start_position='home', degrees_of_freedom=7, extreme_joints=[4,6,7], fully_observable=True, relative_step=True, relative_rad_max=.7853, random=None):
+    def __init__(self, target_size, max_target_distance=1, start_position='home', degrees_of_freedom=7, extreme_joints=[4,6,7], fully_observable=True, relative_step=True, relative_rad_max=.7853, random=None, target_type='random', target_position=[.2,.2,.5]):
         """Initialize an instance of `Jaco`.
 
         Args:
@@ -307,6 +332,8 @@ class Jaco(base.Task):
             automatically (default).
         """
         # target + finger size
+        self.target_type = target_type
+        self.target_position = target_position
         self.relative_step = relative_step
         self.relative_rad_max = relative_rad_max
         self.radii = target_size+.01
@@ -317,7 +344,6 @@ class Jaco(base.Task):
         self.start_position = start_position
         self.random_state = np.random.RandomState(random)
         self._fully_observable = fully_observable
-        self.target_pose = [0, 0, 0]
         # 7dof robot has 7 or 13 joints depending on if fingers are included
         if self.DOF in [7,13]:
             # Params for Denavit-Hartenberg Reference Frame Layout (DH)
@@ -368,53 +394,62 @@ class Jaco(base.Task):
             physics.set_robot_position_home()
         else:
             raise NotImplemented
-        self.joint_angles = physics.get_joint_angles_radians()
-        radius = self.random_state.uniform(.001, self.max_target_distance)
-        theta_angle = self.random_state.uniform(0, 2*np.pi)
-        #phi_angle = self.random_state.uniform(0, 2*np.pi)
-        # x in jaco is left/right, y is forward/back, z is up/down
-        x_target_off = radius*np.sin(theta_angle)
-        y_target_off = radius*np.cos(theta_angle)
-        # Hack - need to check target position
-        #z_target_off = radius*np.sin(phi_angle)
-        #tx = self.random_state.uniform(jaco_fence.minx, jaco_fence.maxx)
-        #ty = self.random_state.uniform(jaco_fence.miny, jaco_fence.maxy)
-        tz = self.random_state.uniform(jaco_fence.minz, jaco_fence.maxz)
-        # determine where robot end effector is now
-        x, y, z = physics.get_tool_pose()
-        # ensure target is within fence
-        
-        target_pose = [x+x_target_off, y+y_target_off, tz]
-        #print('want target pose', target_pose)
-        #target_pose,_ = trim_and_check_pose_safety(target_pose)
-        #print('trimmed target pose', target_pose)
-        self.target_pose = np.array(target_pose)
-        physics.set_pose_of_target(self.target_pose, self.target_size)
+        if self.target_type == 'random':
+            self.joint_angles = physics.get_joint_angles_radians()
+            radius = self.random_state.uniform(.001, self.max_target_distance)
+            theta_angle = self.random_state.uniform(0, 2*np.pi)
+            #phi_angle = self.random_state.uniform(0, 2*np.pi)
+            # x in jaco is left/right, y is forward/back, z is up/down
+            x_target_off = radius*np.sin(theta_angle)
+            y_target_off = radius*np.cos(theta_angle)
+            # Hack - need to check target position
+            #z_target_off = radius*np.sin(phi_angle)
+            #tx = self.random_state.uniform(jaco_fence_minx, jaco_fence_maxx)
+            #ty = self.random_state.uniform(jaco_fence_miny, jaco_fence_maxy)
+            print('minz', jaco_fence_minz, 'maxz', jaco_fence_maxz)
+            tz = self.random_state.uniform(jaco_fence_minz, jaco_fence_maxz)
+            # determine where robot end effector is now
+            x, y, z = physics.get_tool_pose()
+            # ensure target is within fence
+            
+            target_position = [x+x_target_off, y+y_target_off, tz]
+            self.target_position = np.array(target_position)
+        print('want target position', self.target_position)
+        target_pose,_ = trim_and_check_pose_safety(self.target_position)
+        print('trimmed target position', self.target_position)
+        physics.set_pose_of_target(self.target_position, self.target_size)
+        self.get_observation(physics)
+        self.last_commanded_position = physics.get_joint_angles_radians()
         super(Jaco, self).initialize_episode(physics)
 
     def before_step(self, action, physics):
         if self.relative_step:
             # TODO - ensure this handles angle wraps
-            action = np.clip(action, -self.relative_rad_max, self.relative_rad_max)
-            action = [self.joint_angles[x]+action[x] for x in range(len(action))]
+            use_action = np.clip(action, -self.relative_rad_max, self.relative_rad_max)
+            use_action = [self.joint_angles[x]+use_action[x] for x in range(len(use_action))]
+        else:
+            use_action = action
         # dont requeire all joints 
-        if len(action) < physics.n_actuators:
-            action.extend(self.joint_angles[len(action):])
-        joint_extremes = self._find_joint_coordinate_extremes(action[:self.DOF])
+        if len(use_action) < physics.n_actuators:
+            use_action.extend(self.joint_angles[len(use_action):])
         self.safe_step = True
+        joint_extremes = self._find_joint_coordinate_extremes(use_action[:self.DOF])
         for xx,joint_xyz in enumerate(joint_extremes):
             good_xyz, hit = trim_and_check_pose_safety(joint_xyz)
             if hit:
-                #print('joint {} will hit at ({},{},{}) at requested joint position - blocking action'.format(self.extreme_joints[xx], *good_xyz))
-                # the requested position is out of bounds of the fence, do not perform the action
-                self.safe_step = False
+                print('joint {} will hit at ({},{},{}) at requested joint position - blocking action'.format(self.extreme_joints[xx], *good_xyz))
+        #        # the requested position is out of bounds of the fence, do not perform the action
+        #        self.safe_step = False
+        print('joint',self.joint_angles)
+        print('action', use_action)
 
         if self.safe_step:
-            super(Jaco, self).before_step(action, physics)
-        
-    def step(self, action, physics):
-        if self.safe_step:
-            super(Jaco, self).step(action, physics)
+            super(Jaco, self).before_step(use_action, physics)
+
+    #def step(self, action, physics):
+    #    print('taking action', action)
+    #    if self.safe_step:
+    #        super(Jaco, self).step(action, physics)
 
     def get_observation(self, physics):
         """Returns either features or only sensors (to be used with pixels)."""
@@ -423,7 +458,7 @@ class Jaco(base.Task):
         # joint position starts as all zeros 
         joint_extremes = self._find_joint_coordinate_extremes(self.joint_angles[:self.DOF])
         #obs['timestep'] = physics.get_timestep()
-        obs['to_target'] = self.target_pose-joint_extremes[-1]
+        obs['to_target'] = self.target_position-joint_extremes[-1]
         obs['joint_angles'] = self.joint_angles 
         obs['joint_forces'] = physics.get_actuator_force()
         obs['joint_velocity'] = physics.get_actuator_velocity()
@@ -436,5 +471,5 @@ class Jaco(base.Task):
 
     def get_reward(self, physics):
         """Returns a sparse reward to the agent."""
-        distance = self.get_distance(physics.get_tool_pose(), self.target_pose)
+        distance = self.get_distance(physics.get_tool_pose(), self.target_position)
         return rewards.tolerance(distance, (0, self.radii))

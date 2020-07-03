@@ -31,7 +31,7 @@ jaco_fence_maxx = 200
 jaco_fence_miny = -100
 jaco_fence_maxy = 100
 jaco_fence_minz = .15
-jaco_fence_maxz = 100
+jaco_fence_maxz = 1.5
 
 # the kinova jaco2 ros exposes the joint state at ~52Hz
 #_DEFAULT_TIME_LIMIT = 10
@@ -436,12 +436,12 @@ class Jaco(base.Task):
         joint_extremes = self._find_joint_coordinate_extremes(use_action[:self.DOF])
         for xx,joint_xyz in enumerate(joint_extremes):
             good_xyz, hit = trim_and_check_pose_safety(joint_xyz)
-            if hit:
-                print('joint {} will hit at ({},{},{}) at requested joint position - blocking action'.format(self.extreme_joints[xx], *good_xyz))
+            #if hit:
+            #    print('joint {} will hit at ({},{},{}) at requested joint position - blocking action'.format(self.extreme_joints[xx], *good_xyz))
         #        # the requested position is out of bounds of the fence, do not perform the action
         #        self.safe_step = False
-        print('joint',self.joint_angles)
-        print('action', use_action)
+        #print('joint',self.joint_angles)
+        #print('action', use_action)
 
         if self.safe_step:
             super(Jaco, self).before_step(use_action, physics)

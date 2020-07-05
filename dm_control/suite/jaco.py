@@ -204,7 +204,6 @@ class MujocoPhysics(mujoco.Physics):
             raise ValueError('unknown or unconfigured robot type')
  
     def set_pose_of_target(self, target_position, target_size):
-        print("TARGET AT", target_position)
         self.named.model.geom_size['target', 0] = target_size
         self.named.model.geom_pos['target', 'x'] = target_position[0] 
         self.named.model.geom_pos['target', 'y'] = target_position[1] 
@@ -307,7 +306,6 @@ class Jaco(base.Task):
           random: Optional,  an integer seed for creating a new `RandomState`, or None to select a seed
             automatically (default).
         """
-        # target + finger size
         self.target_type = target_type
         self.target_position = target_position
         self.relative_step = relative_step
@@ -316,7 +314,8 @@ class Jaco(base.Task):
 
         self.extreme_joints = extreme_joints
         self.target_size = target_size
-        self.radii = self.target_size * 1.5
+        # finger is ~.06  size
+        self.radii = self.target_size + .1
         self.max_target_distance = max_target_distance
         self.start_position = start_position
         self.random_state = np.random.RandomState(random)
@@ -390,9 +389,7 @@ class Jaco(base.Task):
             
             target_position = [x+x_target_off, y+y_target_off, tz]
             self.target_position = np.array(target_position)
-        print('want target position', self.target_position)
         target_pose,_ = trim_and_check_pose_safety(self.target_position)
-        print('trimmed target position', self.target_position)
         physics.set_pose_of_target(self.target_position, self.target_size)
         self.get_observation(physics)
         self.last_commanded_position = physics.get_joint_angles_radians()
@@ -416,16 +413,13 @@ class Jaco(base.Task):
             #    print('joint {} will hit at ({},{},{}) at requested joint position - blocking action'.format(self.extreme_joints[xx], *good_xyz))
         #        # the requested position is out of bounds of the fence, do not perform the action
         #        self.safe_step = False
-        #print('joint',self.joint_angles)
-        #print('action', use_action)
 
         if self.safe_step:
             super(Jaco, self).before_step(use_action, physics)
 
-    #def step(self, action, physics):
-    #    print('taking action', action)
-    #    if self.safe_step:
-    #        super(Jaco, self).step(action, physics)
+    def step(self, action, physics):
+        if self.safe_step:
+            super(Jaco, self).step(action, physics)
 
     def get_observation(self, physics):
         """Returns either features or only sensors (to be used with pixels)."""

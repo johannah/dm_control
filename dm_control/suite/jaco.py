@@ -39,12 +39,10 @@ _CONTROL_TIMESTEP = .02
 _LONG_EPISODE_TIME_LIMIT = 20
 _SHORT_EPISODE_TIME_LIMIT = 10
 _TINY_EPISODE_TIME_LIMIT = 5
-_BIG_TARGET = .2
+_BIG_TARGET = .05
 _SMALL_TARGET = .015
 
 # size of target in meters
-_BIG_TARGET = .05
-_SMALL_TARGET = .015
 _CLOSE_TARGET_DISTANCE = .5
 _FAR_TARGET_DISTANCE = 1
 SUITE = containers.TaggedTasks()
@@ -98,23 +96,6 @@ def get_model_and_assets(xml_name):
     """Returns a tuple containing the model XML string and a dict of assets."""
     return common.read_model(xml_name), common.ASSETS
 
-
-#@SUITE.add('benchmarking', 'hard')
-#def reacher_hard(xml_name='jaco_j2s7s300_position.xml', random=None, fully_observable=True, environment_kwargs={}):
-#    """Returns reacher with sparse reward and small/far randomized target and randomized start position."""
-#    test_target_flag = True
-#    if 'use_robot' in environment_kwargs.keys():
-#        physics = RobotPhysics()
-#    else:
-#        physics = MujocoPhysics.from_xml_string(*get_model_and_assets(xml_name))
-#        physics.initialize(xml_name, random)
-#    task = Jaco(target_size=_SMALL_TARGET, max_target_distance=_FAR_TARGET_DISTANCE, start_position='random', fully_observable=fully_observable, random=random)
-#    # set n_sub_steps to repeat the action. since control_ts is at 1000 hz and real robot control ts is 50 hz, we repeat the action 20 times
-#    return control.Environment(
-#        physics, task, 
-#        control_timestep=_CONTROL_TIMESTEP, time_limit=_LONG_EPISODE_TIME_LIMIT, 
-#        **environment_kwargs)
-
 @SUITE.add('benchmarking', 'reacher_medium')
 def reacher_medium(xml_name='jaco_j2s7s300_position.xml', random=None, fully_observable=True, environment_kwargs={}):
     """Returns reacher with sparse reward and small/far randomized target and fixed initial robot position."""
@@ -125,7 +106,6 @@ def reacher_medium(xml_name='jaco_j2s7s300_position.xml', random=None, fully_obs
         physics = MujocoPhysics.from_xml_string(*get_model_and_assets(xml_name))
         physics.initialize(xml_name, random)
     task = Jaco(target_size=_SMALL_TARGET, max_target_distance=_FAR_TARGET_DISTANCE, start_position='home', fully_observable=fully_observable, random=random)
-    # set n_sub_steps to repeat the action. since control_ts is at 1000 hz and real robot control ts is 50 hz, we repeat the action 20 times
     return control.Environment(
         physics, task, 
         control_timestep=_CONTROL_TIMESTEP, time_limit=_LONG_EPISODE_TIME_LIMIT, 
@@ -162,8 +142,6 @@ def reacher_easy(xml_name='jaco_j2s7s300_position.xml', random=None, fully_obser
         control_timestep=_CONTROL_TIMESTEP, time_limit=_SHORT_EPISODE_TIME_LIMIT, 
         **environment_kwargs)
 
-
-
 @SUITE.add('benchmarking', 'relative_reacher_easy')
 def relative_reacher_easy(xml_name='jaco_j2s7s300_position.xml', random=None, fully_observable=True, environment_kwargs={}):
     """Returns reacher with sparse reward and large/close randomized target and fixed initial robot position."""
@@ -181,8 +159,6 @@ def relative_reacher_easy(xml_name='jaco_j2s7s300_position.xml', random=None, fu
         control_timestep=_CONTROL_TIMESTEP, time_limit=_SHORT_EPISODE_TIME_LIMIT, 
         **environment_kwargs)
 
-
-
 @SUITE.add('benchmarking', 'relative_reacher_baby')
 def relative_reacher_baby(xml_name='jaco_j2s7s300_position.xml', random=None, fully_observable=True, environment_kwargs={}):
     """Returns reacher with sparse reward and large/close fixed target and fixed initial robot position."""
@@ -192,7 +168,7 @@ def relative_reacher_baby(xml_name='jaco_j2s7s300_position.xml', random=None, fu
     else:
         physics = MujocoPhysics.from_xml_string(*get_model_and_assets(xml_name))
         physics.initialize(xml_name, random)
-    task = Jaco(target_size=_BIG_TARGET, max_target_distance=_CLOSE_TARGET_DISTANCE, 
+    task = Jaco(target_size=_BIG_TARGET,
                 start_position='home', fully_observable=fully_observable, random=random, target_type='fixed', target_position=[.2,-.3,.3])
     # set n_sub_steps to repeat the action. since control_ts is at 1000 hz and real robot control ts is 50 hz, we repeat the action 20 times
     return control.Environment(
@@ -336,10 +312,11 @@ class Jaco(base.Task):
         self.target_position = target_position
         self.relative_step = relative_step
         self.relative_rad_max = relative_rad_max
-        self.radii = target_size+.01
         self.DOF = degrees_of_freedom
+
         self.extreme_joints = extreme_joints
         self.target_size = target_size
+        self.radii = self.target_size * 1.5
         self.max_target_distance = max_target_distance
         self.start_position = start_position
         self.random_state = np.random.RandomState(random)
@@ -406,7 +383,6 @@ class Jaco(base.Task):
             #z_target_off = radius*np.sin(phi_angle)
             #tx = self.random_state.uniform(jaco_fence_minx, jaco_fence_maxx)
             #ty = self.random_state.uniform(jaco_fence_miny, jaco_fence_maxy)
-            print('minz', jaco_fence_minz, 'maxz', jaco_fence_maxz)
             tz = self.random_state.uniform(jaco_fence_minz, jaco_fence_maxz)
             # determine where robot end effector is now
             x, y, z = physics.get_tool_pose()

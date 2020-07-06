@@ -19,19 +19,12 @@ from IPython import embed
 import numpy as np
 
 # real robot jo desk
-#jaco_fence_minx = -.20
-#jaco_fence_maxx = .20
-#jaco_fence_miny = -1
-#jaco_fence_maxy = .3
+#jaco_fence_minx = -200
+#jaco_fence_maxx = 200
+#jaco_fence_miny = -100
+#jaco_fence_maxy = 100
 #jaco_fence_minz = .15
 #jaco_fence_maxz = 1.5
-
-jaco_fence_minx = -200
-jaco_fence_maxx = 200
-jaco_fence_miny = -100
-jaco_fence_maxy = 100
-jaco_fence_minz = .15
-jaco_fence_maxz = 1.5
 
 # the kinova jaco2 ros exposes the joint state at ~52Hz
 #_DEFAULT_TIME_LIMIT = 10
@@ -66,38 +59,31 @@ def DHtransform(d,theta,a,alpha):
     T = np.vstack((np.hstack((rotation_matrix, translation)), last_row))
     return T
 
-def trim_and_check_pose_safety(position):
+def trim_and_check_pose_safety(position, fence):
     """
     take in a position list [x,y,z] and ensure it doesn't violate the defined fence
     """
     x,y,z = position
     hit = False
-    if jaco_fence_maxx < x:
-        x = jaco_fence_maxx
-        hit = True
-    if x < jaco_fence_minx:
-        x = jaco_fence_minx
-        hit = True
-    if jaco_fence_maxy < y:
-        y = jaco_fence_maxy
-        hit = True
-    if y < jaco_fence_miny:
-        y = jaco_fence_miny
-        hit = True
-    if jaco_fence_maxz < z:
-        z = jaco_fence_maxz
-        hit = True
-    if z < jaco_fence_minz:
-        z = jaco_fence_minz
-        hit = True
-    return [x,y,z], hit
+    safe_position = []
+    for ind, dim in enumerate(['x','y','z']):
+        if max(fence[dim]) < position[ind]:
+            out = max(fence[dim])
+            hit = True
+        elif position[ind] < min(fence['x']):
+            out = min(fence[dim])
+            hit = True
+        else:
+            out = position[ind]
+        safe_position.append(out)
+    return safe_position, hit
 
 def get_model_and_assets(xml_name):
     """Returns a tuple containing the model XML string and a dict of assets."""
     return common.read_model(xml_name), common.ASSETS
 
 @SUITE.add('benchmarking', 'reacher_medium')
-def reacher_medium(xml_name='jaco_j2s7s300_position.xml', random=None, fully_observable=True, environment_kwargs={}):
+def reacher_medium(xml_name='jaco_j2s7s300_position.xml', random=None, fully_observable=True, fence={'x':(-1,1),'y':(-1,1),'z':(0.05,1.2)}, environment_kwargs={}):
     """Returns reacher with sparse reward and small/far randomized target and fixed initial robot position."""
     test_target_flag = True
     if 'use_robot' in environment_kwargs.keys():
@@ -105,14 +91,14 @@ def reacher_medium(xml_name='jaco_j2s7s300_position.xml', random=None, fully_obs
     else:
         physics = MujocoPhysics.from_xml_string(*get_model_and_assets(xml_name))
         physics.initialize(xml_name, random)
-    task = Jaco(target_size=_SMALL_TARGET, max_target_distance=_FAR_TARGET_DISTANCE, start_position='home', fully_observable=fully_observable, random=random)
+    task = Jaco(target_size=_SMALL_TARGET, max_target_distance=_FAR_TARGET_DISTANCE, start_position='home', fence=fence, fully_observable=fully_observable, random=random)
     return control.Environment(
         physics, task, 
         control_timestep=_CONTROL_TIMESTEP, time_limit=_LONG_EPISODE_TIME_LIMIT, 
         **environment_kwargs)
 
 @SUITE.add('benchmarking', 'relative_reacher_medium')
-def relative_reacher_medium(xml_name='jaco_j2s7s300_position.xml', random=None, fully_observable=True, environment_kwargs={}):
+def relative_reacher_medium(xml_name='jaco_j2s7s300_position.xml', random=None, fully_observable=True, fence={'x':(-1,1),'y':(-1,1),'z':(0.05,1.2)}, environment_kwargs={}):
     """Returns reacher with sparse reward and small/far randomized target and fixed initial robot position."""
     test_target_flag = True
     if 'use_robot' in environment_kwargs.keys():
@@ -120,14 +106,14 @@ def relative_reacher_medium(xml_name='jaco_j2s7s300_position.xml', random=None, 
     else:
         physics = MujocoPhysics.from_xml_string(*get_model_and_assets(xml_name))
         physics.initialize(xml_name, random)
-    task = Jaco(target_size=_SMALL_TARGET, max_target_distance=_FAR_TARGET_DISTANCE, start_position='home', fully_observable=fully_observable, random=random)
+    task = Jaco(target_size=_SMALL_TARGET, max_target_distance=_FAR_TARGET_DISTANCE, start_position='home', fence=fence, fully_observable=fully_observable, random=random)
     return control.Environment(
         physics, task, 
         control_timestep=_CONTROL_TIMESTEP, time_limit=_SHORT_EPISODE_TIME_LIMIT, 
         **environment_kwargs)
 
 @SUITE.add('benchmarking', 'reacher_easy')
-def reacher_easy(xml_name='jaco_j2s7s300_position.xml', random=None, fully_observable=True, environment_kwargs={}):
+def reacher_easy(xml_name='jaco_j2s7s300_position.xml', random=None, fence={'x':(-1,1),'y':(-1,1),'z':(0.05,1.2)}, fully_observable=True, environment_kwargs={}):
     """Returns reacher with sparse reward and large/close randomized target and fixed initial robot position."""
     test_target_flag = True
     if 'use_robot' in environment_kwargs.keys():
@@ -135,7 +121,7 @@ def reacher_easy(xml_name='jaco_j2s7s300_position.xml', random=None, fully_obser
     else:
         physics = MujocoPhysics.from_xml_string(*get_model_and_assets(xml_name))
         physics.initialize(xml_name, random)
-    task = Jaco(target_size=_BIG_TARGET, max_target_distance=_CLOSE_TARGET_DISTANCE, start_position='home', fully_observable=fully_observable, random=random)
+    task = Jaco(target_size=_BIG_TARGET, max_target_distance=_CLOSE_TARGET_DISTANCE, start_position='home', fence=fence, fully_observable=fully_observable, random=random)
     # set n_sub_steps to repeat the action. since control_ts is at 1000 hz and real robot control ts is 50 hz, we repeat the action 20 times
     return control.Environment(
         physics, task, 
@@ -143,7 +129,7 @@ def reacher_easy(xml_name='jaco_j2s7s300_position.xml', random=None, fully_obser
         **environment_kwargs)
 
 @SUITE.add('benchmarking', 'relative_reacher_easy')
-def relative_reacher_easy(xml_name='jaco_j2s7s300_position.xml', random=None, fully_observable=True, environment_kwargs={}):
+def relative_reacher_easy(xml_name='jaco_j2s7s300_position.xml', random=None, fence={'x':(-1,1),'y':(-1,1),'z':(0.05,1.2)}, fully_observable=True, environment_kwargs={}):
     """Returns reacher with sparse reward and large/close randomized target and fixed initial robot position."""
     test_target_flag = True
     if 'use_robot' in environment_kwargs.keys():
@@ -152,7 +138,7 @@ def relative_reacher_easy(xml_name='jaco_j2s7s300_position.xml', random=None, fu
         physics = MujocoPhysics.from_xml_string(*get_model_and_assets(xml_name))
         physics.initialize(xml_name, random)
     task = Jaco(target_size=_BIG_TARGET, max_target_distance=_CLOSE_TARGET_DISTANCE, 
-                start_position='home', fully_observable=fully_observable, random=random)
+                start_position='home', fence=fence, fully_observable=fully_observable, random=random)
     # set n_sub_steps to repeat the action. since control_ts is at 1000 hz and real robot control ts is 50 hz, we repeat the action 20 times
     return control.Environment(
         physics, task, 
@@ -160,7 +146,7 @@ def relative_reacher_easy(xml_name='jaco_j2s7s300_position.xml', random=None, fu
         **environment_kwargs)
 
 @SUITE.add('benchmarking', 'relative_reacher_baby')
-def relative_reacher_baby(xml_name='jaco_j2s7s300_position.xml', random=None, fully_observable=True, environment_kwargs={}):
+def relative_reacher_baby(xml_name='jaco_j2s7s300_position.xml', random=None, fully_observable=True, fence={'x':(-1,1),'y':(-1,1),'z':(0.05,1.2)}, target_position=[.2,-.5,.6], environment_kwargs={}):
     """Returns reacher with sparse reward and large/close fixed target and fixed initial robot position."""
     test_target_flag = True
     if 'use_robot' in environment_kwargs.keys():
@@ -169,7 +155,7 @@ def relative_reacher_baby(xml_name='jaco_j2s7s300_position.xml', random=None, fu
         physics = MujocoPhysics.from_xml_string(*get_model_and_assets(xml_name))
         physics.initialize(xml_name, random)
     task = Jaco(target_size=_BIG_TARGET,
-                start_position='home', fully_observable=fully_observable, random=random, target_type='fixed', target_position=[.2,-.3,.3])
+                start_position='home', fully_observable=fully_observable, random=random, target_type='fixed', target_position=target_position, fence=fence)
     # set n_sub_steps to repeat the action. since control_ts is at 1000 hz and real robot control ts is 50 hz, we repeat the action 20 times
     return control.Environment(
         physics, task, 
@@ -292,7 +278,8 @@ class RobotPhysics():
 class Jaco(base.Task):
     """A Bring `Task`: bring the prop to the target."""
 
-    def __init__(self, target_size, max_target_distance=1, start_position='home', degrees_of_freedom=7, extreme_joints=[4,6,7], fully_observable=True, relative_step=True, relative_rad_max=.7853, random=None, target_type='random', target_position=[.2,.2,.5]):
+    def __init__(self, target_size, max_target_distance=1, start_position='home', degrees_of_freedom=7, extreme_joints=[4,6,7], fully_observable=True, relative_step=True, relative_rad_max=.7853, random=None, target_type='random', target_position=[.2,.2,.5], 
+            fence = {'x':(-1,1),'y':(-1,1),'z':(0.05,1.2)}):
         """Initialize an instance of `Jaco`.
 
         Args:
@@ -311,6 +298,7 @@ class Jaco(base.Task):
         self.relative_step = relative_step
         self.relative_rad_max = relative_rad_max
         self.DOF = degrees_of_freedom
+        self.fence = fence
 
         self.extreme_joints = extreme_joints
         self.target_size = target_size
@@ -320,7 +308,18 @@ class Jaco(base.Task):
         self.start_position = start_position
         self.random_state = np.random.RandomState(random)
         self._fully_observable = fully_observable
-        # 7dof robot has 7 or 13 joints depending on if fingers are included
+        # find target min/max using fence and considering table obstacle and arm reach
+        self.target_minx = max([.8*min(self.fence['x'])]+[-.75])
+        self.target_maxx = min([.8*max(self.fence['x'])]+[.75])
+        self.target_miny = max([.8*min(self.fence['y'])]+[-.75])
+        self.target_maxy = min([.8*max(self.fence['y'])]+[.75])
+        self.target_minz = max([.8*min(self.fence['z'])]+[0.01])
+        self.target_maxz = min([.8*max(self.fence['z'])]+[.75])
+        print('limiting target to x:({},{}), y:({},{}), z:({},{})'.format(
+                               self.target_minx, self.target_maxx,
+                               self.target_miny, self.target_maxy,
+                               self.target_minz, self.target_maxz))
+
         if self.DOF in [7,13]:
             # Params for Denavit-Hartenberg Reference Frame Layout (DH)
             self.DH_lengths =  {'D1':0.2755, 'D2':0.2050, 'D3':0.2050, 'D4':0.2073, 'D5':0.1038, 'D6':0.1038, 'D7':0.1600, 'e2':0.0098}
@@ -369,27 +368,15 @@ class Jaco(base.Task):
         if self.start_position == 'home':
             physics.set_robot_position_home()
         else:
+            # TODO use tool pose to set initial position
             raise NotImplemented
         if self.target_type == 'random':
-            self.joint_angles = physics.get_joint_angles_radians()
-            radius = self.random_state.uniform(.001, self.max_target_distance)
-            theta_angle = self.random_state.uniform(0, 2*np.pi)
-            #phi_angle = self.random_state.uniform(0, 2*np.pi)
-            # x in jaco is left/right, y is forward/back, z is up/down
-            x_target_off = radius*np.sin(theta_angle)
-            y_target_off = radius*np.cos(theta_angle)
-            # Hack - need to check target position
-            #z_target_off = radius*np.sin(phi_angle)
-            #tx = self.random_state.uniform(jaco_fence_minx, jaco_fence_maxx)
-            #ty = self.random_state.uniform(jaco_fence_miny, jaco_fence_maxy)
-            tz = self.random_state.uniform(jaco_fence_minz, jaco_fence_maxz)
-            # determine where robot end effector is now
-            x, y, z = physics.get_tool_pose()
-            # ensure target is within fence
-            
-            target_position = [x+x_target_off, y+y_target_off, tz]
-            self.target_position = np.array(target_position)
-        target_pose,_ = trim_and_check_pose_safety(self.target_position)
+            tx = self.random_state.uniform(self.target_minx, self.target_maxx)
+            ty = self.random_state.uniform(self.target_miny, self.target_maxy)
+            tz = self.random_state.uniform(self.target_minz, self.target_maxz)
+            self.target_position = np.array([tx,ty,tz])
+        print('**setting target position of:', self.target_position)
+        target_pose,_ = trim_and_check_pose_safety(self.target_position, self.fence)
         physics.set_pose_of_target(self.target_position, self.target_size)
         self.get_observation(physics)
         self.last_commanded_position = physics.get_joint_angles_radians()
@@ -408,11 +395,11 @@ class Jaco(base.Task):
         self.safe_step = True
         joint_extremes = self._find_joint_coordinate_extremes(use_action[:self.DOF])
         for xx,joint_xyz in enumerate(joint_extremes):
-            good_xyz, hit = trim_and_check_pose_safety(joint_xyz)
-            #if hit:
+            good_xyz, hit = trim_and_check_pose_safety(joint_xyz, self.fence)
+            if hit:
+                self.safe_step = False
             #    print('joint {} will hit at ({},{},{}) at requested joint position - blocking action'.format(self.extreme_joints[xx], *good_xyz))
         #        # the requested position is out of bounds of the fence, do not perform the action
-        #        self.safe_step = False
 
         if self.safe_step:
             super(Jaco, self).before_step(use_action, physics)

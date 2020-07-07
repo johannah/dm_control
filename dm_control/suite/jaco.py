@@ -63,16 +63,17 @@ def trim_and_check_pose_safety(position, fence):
     """
     take in a position list [x,y,z] and ensure it doesn't violate the defined fence
     """
-    x,y,z = position
     hit = False
     safe_position = []
     for ind, dim in enumerate(['x','y','z']):
         if max(fence[dim]) < position[ind]:
             out = max(fence[dim])
             hit = True
-        elif position[ind] < min(fence['x']):
+            #print('hit max: req {} is more than fence {}'.format(position[ind], max(fence[dim])))
+        elif position[ind] < min(fence[dim]):
             out = min(fence[dim])
             hit = True
+            #print('hit min: req {} is less than fence {}'.format(position[ind], min(fence[dim])))
         else:
             out = position[ind]
         safe_position.append(out)
@@ -299,22 +300,24 @@ class Jaco(base.Task):
         self.relative_rad_max = relative_rad_max
         self.DOF = degrees_of_freedom
         self.fence = fence
+        self.hit_penalty = 0.0
 
         self.extreme_joints = extreme_joints
         self.target_size = target_size
         # finger is ~.06  size
-        self.radii = self.target_size + .1
+        self.radii = self.target_size + .15
         self.max_target_distance = max_target_distance
         self.start_position = start_position
         self.random_state = np.random.RandomState(random)
         self._fully_observable = fully_observable
         # find target min/max using fence and considering table obstacle and arm reach
-        self.target_minx = max([.8*min(self.fence['x'])]+[-.75])
-        self.target_maxx = min([.8*max(self.fence['x'])]+[.75])
-        self.target_miny = max([.8*min(self.fence['y'])]+[-.75])
-        self.target_maxy = min([.8*max(self.fence['y'])]+[.75])
-        self.target_minz = max([.8*min(self.fence['z'])]+[0.01])
-        self.target_maxz = min([.8*max(self.fence['z'])]+[.75])
+        self.target_minx = max([min(self.fence['x'])]+[-.75])+self.target_size
+        self.target_maxx = min([max(self.fence['x'])]+[.75])-self.target_size
+        self.target_miny = max([min(self.fence['y'])]+[-.5])+self.target_size
+        self.target_maxy = min([max(self.fence['y'])]+[.75])-self.target_size
+        self.target_minz = max([min(self.fence['z'])]+[0.01])+self.target_size
+        self.target_maxz = min([max(self.fence['z'])]+[1.0])-self.target_size
+        print('rx fence of', self.fence)
         print('limiting target to x:({},{}), y:({},{}), z:({},{})'.format(
                                self.target_minx, self.target_maxx,
                                self.target_miny, self.target_maxy,
@@ -371,9 +374,13 @@ class Jaco(base.Task):
             # TODO use tool pose to set initial position
             raise NotImplemented
         if self.target_type == 'random':
-            tx = self.random_state.uniform(self.target_minx, self.target_maxx)
-            ty = self.random_state.uniform(self.target_miny, self.target_maxy)
-            tz = self.random_state.uniform(self.target_minz, self.target_maxz)
+            distance = 10
+            while distance > 1.0:
+                tx = self.random_state.uniform(self.target_minx, self.target_maxx)
+                ty = self.random_state.uniform(self.target_miny, self.target_maxy)
+                tz = self.random_state.uniform(self.target_minz, self.target_maxz)
+                # use max arm length distance of 1
+                distance = tx + ty + tz
             self.target_position = np.array([tx,ty,tz])
         print('**setting target position of:', self.target_position)
         target_pose,_ = trim_and_check_pose_safety(self.target_position, self.fence)
@@ -383,8 +390,8 @@ class Jaco(base.Task):
         super(Jaco, self).initialize_episode(physics)
 
     def before_step(self, action, physics):
+        self.hit_penalty = 0.0
         if self.relative_step:
-            # TODO - ensure this handles angle wraps
             use_action = np.clip(action, -self.relative_rad_max, self.relative_rad_max)
             use_action = [self.joint_angles[x]+use_action[x] for x in range(len(use_action))]
         else:
@@ -397,16 +404,40 @@ class Jaco(base.Task):
         for xx,joint_xyz in enumerate(joint_extremes):
             good_xyz, hit = trim_and_check_pose_safety(joint_xyz, self.fence)
             if hit:
+                self.hit_penalty -= 1
                 self.safe_step = False
-            #    print('joint {} will hit at ({},{},{}) at requested joint position - blocking action'.format(self.extreme_joints[xx], *good_xyz))
+                print('joint {} will hit at ({},{},{}) at requested joint position - blocking action'.format(self.extreme_joints[xx], *good_xyz))
+                break
+                #print(hit)
+                #print('relat')
+                #print(joint_extremes)
+
+        #curr_joint_extremes = self._find_joint_coordinate_extremes(self.joint_angles[:self.DOF])
+        #print('curr ext')
+        #print(curr_joint_extremes)
+        #print('joint ang', self.joint_angles)
+        #print('rel action', action)
+        #print('use action', use_action)
+
+        #j4 = physics.named.data.xpos['jaco_link_4', ['x', 'y', 'z']]
+        #j6 = physics.named.data.xpos['jaco_link_6', ['x', 'y', 'z']]
+        #j7 = physics.named.data.xpos['jaco_link_7', ['x', 'y', 'z']]
+        #print('p4', j4)
+        #print('p6', j6)
+        #print('p7', j7)
+
+        #for xx,joint_xyz in enumerate(curr_joint_extremes):
+        #    good_xyz, cur_hit = trim_and_check_pose_safety(joint_xyz, self.fence)
+        #    print('joint {} at ({},{},{}) at requested joint position - {}'.format(self.extreme_joints[xx], *good_xyz, cur_hit))
+
+
+            
         #        # the requested position is out of bounds of the fence, do not perform the action
 
-        if self.safe_step:
-            super(Jaco, self).before_step(use_action, physics)
-
-    def step(self, action, physics):
-        if self.safe_step:
-            super(Jaco, self).step(action, physics)
+        if not self.safe_step:
+            use_action = self.joint_angles
+        super(Jaco, self).before_step(use_action, physics)
+        #print('==================')
 
     def get_observation(self, physics):
         """Returns either features or only sensors (to be used with pixels)."""
@@ -429,4 +460,4 @@ class Jaco(base.Task):
     def get_reward(self, physics):
         """Returns a sparse reward to the agent."""
         distance = self.get_distance(physics.get_tool_pose(), self.target_position)
-        return rewards.tolerance(distance, (0, self.radii))
+        return rewards.tolerance(distance, (0, self.radii)) + self.hit_penalty

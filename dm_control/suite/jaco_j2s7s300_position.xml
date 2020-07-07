@@ -44,7 +44,7 @@
     <light cutoff="200" diffuse="1.2 1.2 1.2" dir="-0 0 -1.3" directional="true" exponent="1" pos="0 0 1.3" specular=".1 .1 .1"/>
 
     <!-- <camera name="topview" pos="0 0 2" zaxis="0 0 1" fovy="45" ipd="0.068"/> -->
-    <camera name="topview" pos="0 0 1.7" quat="1 0 0 0" fovy="81.1"/>
+    <camera name="topview" pos="0 0 1.4" quat="1 0 0 0" fovy="81.1"/>
 
     <!-- constrain on by placing fences in plane size is the "radius" of the rectangle (.5 h or w)--> 
     <!-- wall_y is facing the side where the power cables come into the robot -->
@@ -52,7 +52,7 @@
 -->
     <geom name="table" type="plane" pos="-.3 -.15 0" zaxis="0 0 1" size=".91 .3 .1" material="grid"/>
 
-    <geom name="target" pos="1 1 1" material="target" type="sphere" size=".05"/>
+    <geom name="target" pos="1 1 1" material="target" type="sphere" size=".05" friction="0" condim="1"/>
 
     <!-- plot coordinate system xyz-rgb-->
     <!--
@@ -61,7 +61,18 @@
     <geom name="coord_z" type="capsule" fromto="1 1 1 1 1 1.4"  size=".002" condim=1 friction=0 rgba="0 0 1 1" mass="0"/>
      -->
 
+   <geom name="low_fence_pos_x" type="capsule" fromto=".5 .4 .12 .5 -1 .12"  size=".01" condim=1 friction=0 rgba="1 0 0 1" mass="0"/>
+    <geom name="low_fence_neg_x" type="capsule" fromto="-.5 .4 .12 -.5 -1 .12"  size=".01" condim=1 friction=0 rgba="1 0 0 1" mass="0"/>
 
+    <geom name="low_fence_pos_y" type="capsule" fromto="-.5 .4 .12 .5 .4 .12"  size=".01" condim=1 friction=0 rgba="0 1 0 1" mass="0"/>
+    <geom name="low_fence_neg_y" type="capsule" fromto="-.5 -1 .12 .5 -1 .12"  size=".01" condim=1 friction=0 rgba="0 1 0 1" mass="0"/>
+
+
+    <geom name="high_fence_pos_x" type="capsule" fromto=".5 .4 1.2 .5 -1 1.2"  size=".01" condim=1 friction=0 rgba="1 0 0 1" mass="0"/>
+    <geom name="high_fence_neg_x" type="capsule" fromto="-.5 .4 1.2 -.5 -1 1.2"  size=".01" condim=1 friction=0 rgba="1 0 0 1" mass="0"/>
+
+    <geom name="high_fence_pos_y" type="capsule" fromto="-.5 .4 1.2 .5 .4 1.2"  size=".01" condim=1 friction=0 rgba="0 1 0 1" mass="0"/>
+    <geom name="high_fence_neg_y" type="capsule" fromto="-.5 -1 1.2 .5 -1 1.2"  size=".01" condim=1 friction=0 rgba="0 1 0 1" mass="0"/>
 
     <!-- robot -->
 

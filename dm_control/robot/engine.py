@@ -38,14 +38,13 @@ import threading
 
 from absl import logging
 #from dm_control import _render
-#from dm_control.mujoco import index
-#from dm_control.mujoco.wrapper import util
 from dm_control.rl import control as _control
 from dm_env import specs
-
+import time
 import numpy as np
 import six
 import time
+import json
 from IPython import embed
 
 class RobotClient():
@@ -61,6 +60,7 @@ class RobotClient():
     while not self.connected:
       print("attempting to connect with robot at {}".format(self.robot_ip))
       self.tcp_socket = socket.socket(socket.AF_INET,socket.SOCK_STREAM)
+      self.tcp_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
       # connect to computer
       self.tcp_socket.connect((self.robot_ip, self.port))
       print('connected')
@@ -68,40 +68,285 @@ class RobotClient():
       if not self.connected:
         time.sleep(1)
 
+  def decode_state(self, robot_response):
+    #print('decoding', robot_response)
+    ackmsg, resp = robot_response.split('**')
+    # successful msg has ACKSTEP
+    assert ackmsg[:5] == '<|ACK'
+    # make sure we got msg end
+    assert resp[-2:] == '|>'
+    vals = [x.split(': ')[1] for x in resp[:-2].split('\n')]
+    # deal with each data type
+    success = bool(vals[0]) 
+    robot_msg = eval(vals[1])
+    # not populated
+    joint_names = vals[2]
+    # num states seen in this step
+    self.n_state_updates =  int(vals[3])
+    timediff = json.loads(vals[4])[-1]
+    joint_position = json.loads(vals[5])
+    joint_velocity = json.loads(vals[6])
+    joint_effort = json.loads(vals[7])
+    tool_pose = json.loads(vals[8])
+    #print('returning from decode state')
+    return timediff, joint_position, joint_velocity, joint_effort, tool_pose
+
   def send(self, cmd, msg='XX'):
     packet = self.startseq+cmd+self.midseq+msg+self.endseq
     self.tcp_socket.sendall(packet.encode())
     # TODO - should prob handle larger packets
     rx = self.tcp_socket.recv(2048).decode()
-    print("rx", rx)
+    #print("rx", rx)
     return rx
 
   def home(self):
     return self.send('HOME')
 
   def reset(self):
-    return self.send('RESET')
-
+    return self.decode_state(self.send('RESET'))
+  
   def get_state(self):
-    return self.send('GET_STATE')
+    return self.decode_state(self.send('GET_STATE'))
 
   def initialize(self, minx, maxx, miny, maxy, minz, maxz):
     data = '{},{},{},{},{},{}'.format(minx,maxx, 
                                       miny,maxy, 
                                       minz,maxz)
-    self.send('INIT', data)
+    return self.decode_state(self.send('INIT', data))
+    
 
   def step(self, command_type, relative, unit, data):
     assert(command_type in ['VEL', 'ANGLE', 'TOOL'])
     datastr = ','.join(['%.4f'%x for x in data])
-    data = '{},{},{},{}'.format(command_type, relative, unit, datastr)
-    return self.send('STEP', data)
+    data = '{},{},{},{}'.format(command_type, 0, unit, datastr)
+    #print("STEP", data)
+    return self.decode_state(self.send('STEP', data))
 
   def end(self):
     self.send('END')
     print('disconnected from {}'.format(self.robot_ip))
     self.tcp_socket.close()
     self.connected = False
+
+class Physics(_control.Physics):
+  """Encapsulates a robot interface.
+
+  # Apply controls and advance the simulation state.
+  physics.set_control(np.random.random_sample(size=N_ACTUATORS))
+  physics.step()
+
+  # Render a camera defined in the NumPy array.
+  rgb = physics.render(height=240, width=320, id=0)
+
+  """
+  def __init(self):
+      print("AT ROBOT/PHYSICS")
+
+  def initialize(self, robot_server_ip='127.0.0.1', robot_server_port=9030, fence={'x':[-.5,.5], 'y':[-.5,.3], 'z':[0.1, 1.2]}):
+    self.fence = fence
+    # TODO hack!
+    self.data = np.zeros(7)
+    self.n_actuators = 13
+    self.experiment_timestep = 0
+    self.robot_server_ip = robot_server_ip
+    self.robot_server_port = robot_server_port
+    # todo - require confirmation of fence?
+    self.robot_client = RobotClient(robot_ip=self.robot_server_ip, port=self.robot_server_port)
+    self.robot_client.connect()
+    resp = self.robot_client.initialize(
+                min(self.fence['x']), max(self.fence['x']),
+                min(self.fence['y']), max(self.fence['y']),
+                min(self.fence['z']), max(self.fence['z']))
+    self.handle_state(resp)
+    print('finished initialize on dm_control')
+
+  def set_control(self, control):
+    """Sets the control signal for the actuators.
+
+    Args:
+      control: NumPy array or array-like actuation values.
+    """
+    self.data = control[:7]
+    print('setting control', control, self.data)
+
+  def step(self):
+    """Advances physics with up-to-date position and velocity dependent fields.
+    """
+    print("stepping", self.data)
+    self.handle_state(self.robot_client.step(command_type='ANGLE', relative=False, unit='rad', data=self.data))
+
+#  def render(self, height=240, width=320, camera_id=-1, overlays=(),
+#             depth=False, segmentation=False, scene_option=None):
+#    """Returns a camera view as a NumPy array of pixel values.
+#
+#    Args:
+#      height: Viewport height (number of pixels). Optional, defaults to 240.
+#      width: Viewport width (number of pixels). Optional, defaults to 320.
+#      camera_id: Optional camera name or index. Defaults to -1, the free
+#        camera, which is always defined. A nonnegative integer or string
+#        corresponds to a fixed camera, which must be defined in the model XML.
+#        If `camera_id` is a string then the camera must also be named.
+#      overlays: An optional sequence of `TextOverlay` instances to draw. Only
+#        supported if `depth` is False.
+#      depth: If `True`, this method returns a NumPy float array of depth values
+#        (in meters). Defaults to `False`, which results in an RGB image.
+#      segmentation: If `True`, this method returns a 2-channel NumPy int32 array
+#        of label values where the pixels of each object are labeled with the
+#        pair (mjModel ID, mjtObj enum object type). Background pixels are
+#        labeled (-1, -1). Defaults to `False`, which returns an RGB image.
+#      scene_option: An optional `wrapper.MjvOption` instance that can be used to
+#        render the scene with custom visualization options. If None then the
+#        default options will be used.
+#
+#    Returns:
+#      The rendered RGB, depth or segmentation image.
+#    """
+#    pass
+
+  def get_state(self):
+    """Returns the physics state.
+
+    Returns:
+      NumPy array containing full physics simulation state.
+    """
+    return np.concatenate(self._physics_state_items())
+
+  def _physics_state_items(self):
+    """Returns list of arrays making up internal physics simulation state.
+
+    The physics state consists of the state variables, their derivatives and
+    actuation activations.
+
+    Returns:
+      List of NumPy arrays containing full physics simulation state.
+    """
+    return [self.actuator_position, self.actuator_velocity, self.actuator_effort]
+
+  def handle_state(self, state_tuple):
+    timediff, joint_position, joint_velocity, joint_effort, tool_pose = state_tuple
+    #print("HANDLE", joint_position)
+    self.timediff = timediff
+    self.actuator_position = np.array(joint_position)
+    self.actuator_velocity = np.array(joint_velocity)
+    self.actuator_effort = np.array(joint_effort)
+    self.tool_pose = np.array(tool_pose)
+
+#  def set_state(self, physics_state):
+#    """Sets the physics state.
+#
+#    Args:
+#      physics_state: NumPy array containing the full physics simulation state.
+#
+#    Raises:
+#      ValueError: If `physics_state` has invalid size.
+#    """
+#    state_items = self._physics_state_items()
+#
+#    expected_shape = (sum(item.size for item in state_items),)
+#    if expected_shape != physics_state.shape:
+#      raise ValueError('Input physics state has shape {}. Expected {}.'.format(
+#          physics_state.shape, expected_shape))
+#
+#    start = 0
+#    for state_item in state_items:
+#      size = state_item.size
+#      np.copyto(state_item, physics_state[start:start + size])
+#      start += size
+
+  #def copy(self, share_model=False):
+  #  """Creates a copy of this `Physics` instance.
+
+  #  Args:
+  #    share_model: If True, the copy and the original will share a common
+  #      MjModel instance. By default, both model and data will both be copied.
+
+  #  Returns:
+  #    A `Physics` instance.
+  #  """
+  #  if not share_model:
+  #    new_model = self.model.copy()
+  #  else:
+  #    new_model = self.model
+  #  new_data = wrapper.MjData(new_model)
+  #  mjlib.mj_copyData(new_data.ptr, new_data.model.ptr, self.data.ptr)
+  #  cls = self.__class__
+  #  new_obj = cls.__new__(cls)
+  #  new_obj._reload_from_data(new_data)  # pylint: disable=protected-access
+  #  return new_obj
+
+  def reset(self):
+    """Resets internal variables of the physics simulation."""
+    self.n_steps = 0
+    self.experiment_timestep = 0
+    self.handle_state(self.robot_client.reset())
+
+  def after_reset(self):
+    """Runs after resetting internal variables of the physics simulation."""
+    # Disable actuation since we don't yet have meaningful control inputs.
+    #self.robot_client.end()
+    pass
+
+  def forward(self):
+    """Recomputes the forward dynamics without advancing the simulation."""
+    # Note: `mj_forward` differs from `mj_step1` in that it also recomputes
+    # quantities that depend on acceleration (and therefore on the state of the
+    # controls). For example `mj_forward` updates accelerometer and gyro
+    # readings, whereas `mj_step1` does not.
+    with self.check_invalid_state():
+      mjlib.mj_forward(self.model.ptr, self.data.ptr)
+
+  #@contextlib.contextmanager
+  #def check_invalid_state(self):
+  #  """Raises a `base.PhysicsError` if the simulation state is invalid."""
+  #  # `np.copyto(dst, src)` is marginally faster than `dst[:] = src`.
+  #  np.copyto(self._warnings_before, self._warnings)
+  #  yield
+  #  np.greater(self._warnings, self._warnings_before, out=self._new_warnings)
+  #  if any(self._new_warnings):
+  #    warning_names = np.compress(self._new_warnings, enums.mjtWarning._fields)
+  #    raise _control.PhysicsError(
+  #        _INVALID_PHYSICS_STATE.format(warning_names=', '.join(warning_names)))
+
+  def __getstate__(self):
+    return self.data  # All state is assumed to reside within `self.data`.
+
+  def _physics_state_items(self):
+    """Returns list of arrays making up internal physics simulation state.
+
+    The physics state consists of the state variables, their derivatives and
+    actuation activations.
+
+    Returns:
+      List of NumPy arrays containing full physics simulation state.
+    """
+    return [self.actuator_position, self.actuator_velocity, self.actuator_effort]
+
+  # Named views of simulation data.
+
+  def control(self):
+    """Returns a copy of the control signals for the actuators."""
+    return self.control_action
+
+  def state(self):
+    """Returns the full physics state. Alias for `get_physics_state`."""
+    return np.concatenate(self._physics_state_items())
+
+  def position(self):
+    """Returns a copy of the generalized positions (system configuration)."""
+    return self.actuatory_position
+
+  def velocity(self):
+    """Returns a copy of the generalized velocities."""
+    return self.actuator_velocity()
+
+  def timestep(self):
+    """Returns the simulation timestep."""
+    return .02
+
+  def time(self):
+    """Returns episode time in seconds."""
+    return self.experiment_timestep
+
 
 #class Camera(object):
 #  """ scene camera.

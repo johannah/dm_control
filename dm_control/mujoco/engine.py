@@ -349,7 +349,6 @@ class Physics(_control.Physics):
   def from_model(cls, model):
     """A named constructor from a `wrapper.MjModel` instance."""
     data = wrapper.MjData(model)
-    print(data)
     return cls(data)
 
   @classmethod

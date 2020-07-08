@@ -461,11 +461,17 @@ class Jaco(base.Task):
         #obs['timestep'] = physics.get_timestep()
         # DID THIS BREAK?
         obs['to_target'] = self.target_position-physics.get_tool_coordinates()
-
         obs['joint_angles'] = self.joint_angles
         obs['joint_forces'] = physics.get_actuator_force()
         obs['joint_velocity'] = physics.get_actuator_velocity()
         obs['joint_extremes'] = joint_extremes
+        obs['joint_1_xpos'] = physics.named.data.xpos['jaco_link_1', ['x','y','z']]
+        obs['joint_2_xpos'] = physics.named.data.xpos['jaco_link_2', ['x','y','z']]
+        obs['joint_3_xpos'] = physics.named.data.xpos['jaco_link_3', ['x','y','z']]
+        obs['joint_4_xpos'] = physics.named.data.xpos['jaco_link_4', ['x','y','z']]
+        obs['joint_5_xpos'] = physics.named.data.xpos['jaco_link_5', ['x','y','z']]
+        obs['joint_6_xpos'] = physics.named.data.xpos['jaco_link_6', ['x','y','z']]
+        obs['joint_7_xpos'] = physics.named.data.xpos['jaco_link_7', ['x','y','z']]
         return obs
 
     def get_distance(self, position_1, position_2):

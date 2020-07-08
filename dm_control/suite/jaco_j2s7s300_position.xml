@@ -8,6 +8,9 @@
   <include file="./common/visual.xml"/>
   <include file="./common/materials.xml"/>
   <asset>
+	  <texture name="light_wood_v2" file="./common/textures/light_wood_v2.png" type="2d"/>
+    <material shininess=".1" name="light_wood_v2" texture="light_wood_v2" specular="0.4"/>
+
         <mesh name="base" file="base.stl" />
         <mesh name="shoulder" file="shoulder.stl" />
         <mesh name="arm_half_1" file="arm_half_1.stl" />
@@ -44,13 +47,13 @@
     <light cutoff="200" diffuse="1.2 1.2 1.2" dir="-0 0 -1.3" directional="true" exponent="1" pos="0 0 1.3" specular=".1 .1 .1"/>
 
     <!-- <camera name="topview" pos="0 0 2" zaxis="0 0 1" fovy="45" ipd="0.068"/> -->
-    <camera name="topview" pos="0 0 1.4" quat="1 0 0 0" fovy="81.1"/>
+    <camera name="topview" pos="-.2 -.2 1.4" quat="1 0 0 0" fovy="70"/>
 
     <!-- constrain on by placing fences in plane size is the "radius" of the rectangle (.5 h or w)--> 
     <!-- wall_y is facing the side where the power cables come into the robot -->
     <!--
 -->
-    <geom name="table" type="plane" pos="-.3 -.15 0" zaxis="0 0 1" size=".91 .3 .1" material="grid"/>
+    <geom name="table" type="plane" pos="-.3 -.15 0" zaxis="0 0 1" size=".91 .3 .1" material="light_wood_v2"/>
 
     <geom name="target" pos="1 1 1" material="target" type="sphere" size=".05" friction="0" condim="1"/>
 
@@ -61,20 +64,45 @@
     <geom name="coord_z" type="capsule" fromto="1 1 1 1 1 1.4"  size=".002" condim=1 friction=0 rgba="0 0 1 1" mass="0"/>
      -->
 
-<!--
-   <geom name="low_fence_pos_x" type="capsule" fromto=".5 .4 .12 .5 -1 .12"  size=".01" condim=1 friction=0 rgba="1 0 0 1" mass="0"/>
-    <geom name="low_fence_neg_x" type="capsule" fromto="-.5 .4 .12 -.5 -1 .12"  size=".01" condim=1 friction=0 rgba="1 0 0 1" mass="0"/>
+   <geom name="low_fence_pos_x" type="capsule" fromto=".5 .4 .12 .5 -1 .12"  size=".02" condim=1 friction=0 rgba="0 1 0 1" mass="0"/>
+    <geom name="low_fence_neg_x" type="capsule" fromto="-.5 .4 .12 -.5 -1 .12"  size=".02" condim=1 friction=0 rgba="0 1 0 1" mass="0"/>
 
-    <geom name="low_fence_pos_y" type="capsule" fromto="-.5 .4 .12 .5 .4 .12"  size=".01" condim=1 friction=0 rgba="0 1 0 1" mass="0"/>
-    <geom name="low_fence_neg_y" type="capsule" fromto="-.5 -1 .12 .5 -1 .12"  size=".01" condim=1 friction=0 rgba="0 1 0 1" mass="0"/>
+    <geom name="low_fence_pos_y" type="capsule" fromto="-.5 .4 .12 .5 .4 .12"  size=".02" condim=1 friction=0 rgba="1 0 0 1" mass="0"/>
+    <geom name="low_fence_neg_y" type="capsule" fromto="-.5 -1 .12 .5 -1 .12"  size=".02" condim=1 friction=0 rgba="1 0 0 1" mass="0"/>
 
 
-    <geom name="high_fence_pos_x" type="capsule" fromto=".5 .4 1.2 .5 -1 1.2"  size=".01" condim=1 friction=0 rgba="1 0 0 1" mass="0"/>
-    <geom name="high_fence_neg_x" type="capsule" fromto="-.5 .4 1.2 -.5 -1 1.2"  size=".01" condim=1 friction=0 rgba="1 0 0 1" mass="0"/>
+    <geom name="high_fence_pos_x" type="capsule" fromto=".5 .4 1.2 .5 -1 1.2"  size=".02" condim=1 friction=0 rgba="0 1 0 1" mass="0"/>
+    <geom name="high_fence_neg_x" type="capsule" fromto="-.5 .4 1.2 -.5 -1 1.2"  size=".02" condim=1 friction=0 rgba="0 1 0 1" mass="0"/>
 
-    <geom name="high_fence_pos_y" type="capsule" fromto="-.5 .4 1.2 .5 .4 1.2"  size=".01" condim=1 friction=0 rgba="0 1 0 1" mass="0"/>
-    <geom name="high_fence_neg_y" type="capsule" fromto="-.5 -1 1.2 .5 -1 1.2"  size=".01" condim=1 friction=0 rgba="0 1 0 1" mass="0"/>
--->
+    <geom name="high_fence_pos_y" type="capsule" fromto="-.5 .4 1.2 .5 .4 1.2"  size=".02" condim=1 friction=0 rgba="1 0 0 1" mass="0"/>
+    <geom name="high_fence_neg_y" type="capsule" fromto="-.5 -1 1.2 .5 -1 1.2"  size=".02" condim=1 friction=0 rgba="1 0 0 1" mass="0"/>
+
+   <! x grid lines -->
+   <geom name="x0" type="capsule" fromto="0 .4 .02 0 -1 .02"        size=".01" condim=1 friction=0       rgba="1 1 1 1" mass="0"/>
+   <geom name="x1" type="capsule" fromto="0.1 .4 .02 0.1 -1 .02"    size=".01" condim=1 friction=0   rgba="0 1 0 1" mass="0"/>
+   <geom name="x2" type="capsule" fromto="0.2 .4 .02 0.2 -1 .02"    size=".01" condim=1 friction=0   rgba="0 1 0 1" mass="0"/>
+   <geom name="x3" type="capsule" fromto="0.3 .4 .02 0.3 -1 .02"    size=".01" condim=1 friction=0   rgba="0 1 0 1" mass="0"/>
+   <geom name="x4" type="capsule" fromto="0.4 .4 .02 0.4 -1 .02"    size=".01" condim=1 friction=0   rgba="0 1 0 1" mass="0"/>
+   <geom name="xn1" type="capsule" fromto="-.1 .4 .02 -0.1 -1 .02"  size=".01" condim=1 friction=0 rgba="0 1 0 1" mass="0"/>
+   <geom name="xn2" type="capsule" fromto="-.2 .4 .02 -0.2 -1 .02"  size=".01" condim=1 friction=0 rgba="0 1 0 1" mass="0"/>
+   <geom name="xn3" type="capsule" fromto="-.3 .4 .02 -0.3 -1 .02"  size=".01" condim=1 friction=0 rgba="0 1 0 1" mass="0"/>
+   <geom name="xn4" type="capsule" fromto="-.4 .4 .02 -0.4 -1 .02"  size=".01" condim=1 friction=0 rgba="0 1 0 1" mass="0"/>
+
+
+   <! y grid lines -->
+    <geom name="y0" type="capsule" fromto="-.5 0 0.2 .5 0 0.2"       size=".01" condim=1 friction=0      rgba="1 1 1 1" mass="0"/>
+    <geom name="y1" type="capsule" fromto="-.5 0.1 0.2 .5 0.1 0.2"   size=".01" condim=1 friction=0  rgba="1 0 0 1" mass="0"/>
+    <geom name="y2" type="capsule" fromto="-.5 0.2 0.2 .5 0.2 0.2"   size=".01" condim=1 friction=0  rgba="1 0 0 1" mass="0"/>
+    <geom name="y3" type="capsule" fromto="-.5 0.3 0.2 .5 0.3 0.2"   size=".01" condim=1 friction=0  rgba="1 0 0 1" mass="0"/>
+    <geom name="yn1" type="capsule" fromto="-.5 -.1 0.2 .5 -.1 0.2"  size=".01" condim=1 friction=0 rgba="1 0 0 1" mass="0"/>
+    <geom name="yn2" type="capsule" fromto="-.5 -.2 0.2 .5 -.2 0.2"  size=".01" condim=1 friction=0 rgba="1 0 0 1" mass="0"/>
+    <geom name="yn3" type="capsule" fromto="-.5 -.3 0.2 .5 -.3 0.2"  size=".01" condim=1 friction=0 rgba="1 0 0 1" mass="0"/>
+    <geom name="yn4" type="capsule" fromto="-.5 -.4 0.2 .5 -.4 0.2"  size=".01" condim=1 friction=0 rgba="1 0 0 1" mass="0"/>
+    <geom name="yn5" type="capsule" fromto="-.5 -.5 0.2 .5 -.5 0.2"  size=".01" condim=1 friction=0 rgba="1 0 0 1" mass="0"/>
+    <geom name="yn6" type="capsule" fromto="-.5 -.6 0.2 .5 -.6 0.2"  size=".01" condim=1 friction=0 rgba="1 0 0 1" mass="0"/>
+    <geom name="yn7" type="capsule" fromto="-.5 -.7 0.2 .5 -.7 0.2"  size=".01" condim=1 friction=0 rgba="1 0 0 1" mass="0"/>
+    <geom name="yn8" type="capsule" fromto="-.5 -.8 0.2 .5 -.8 0.2"  size=".01" condim=1 friction=0 rgba="1 0 0 1" mass="0"/>
+    <geom name="yn9" type="capsule" fromto="-.5 -.9 0.2 .5 -.9 0.2"  size=".01" condim=1 friction=0 rgba="1 0 0 1" mass="0"/>
 
     <!-- robot -->
 

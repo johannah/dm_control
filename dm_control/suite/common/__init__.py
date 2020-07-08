@@ -26,6 +26,7 @@ _SUITE_DIR = os.path.dirname(os.path.dirname(__file__))
 _FILENAMES = [
     "./common/materials.xml",
     "./common/visual.xml",
+    "./common/skybox.xml",
     "./common/texture_config.xml",
     #  below files are directly from jaco approximation
     #"./common/meshes/finger_distal_limb_1.stl",

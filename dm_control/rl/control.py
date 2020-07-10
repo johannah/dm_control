@@ -80,6 +80,7 @@ class Environment(dm_env.Environment):
           self._physics.timestep() * self._n_sub_steps)
     self._step_count = 0
     self._reset_next_step = True
+    print(self._n_sub_steps, n_sub_steps, control_timestep, time_limit, self._physics.timestep(), self._step_limit)
 
   def reset(self):
     """Starts a new episode and returns the first `TimeStep`."""

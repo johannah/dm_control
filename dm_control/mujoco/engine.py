@@ -145,6 +145,7 @@ class Physics(_control.Physics):
     # (most of) mjData is in sync with qpos and qvel. In the case of non-Euler
     # integrators (e.g. RK4) an additional mj_step1 must be called after the
     # last mj_step to ensure mjData syncing.
+#    print("applying", self.named.data.ctrl)
     with self.check_invalid_state():
       if self.model.opt.integrator == enums.mjtIntegrator.mjINT_EULER:
         mjlib.mj_step2(self.model.ptr, self.data.ptr)

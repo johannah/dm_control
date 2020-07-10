@@ -15,7 +15,7 @@ from dm_control.utils import containers
 from dm_control.utils import rewards
 from dm_control import robot
 from IPython import embed
-
+from copy import deepcopy
 import numpy as np
 
 # real robot jo desk
@@ -28,7 +28,9 @@ import numpy as np
 
 # the kinova jaco2 ros exposes the joint state at ~52Hz
 #_DEFAULT_TIME_LIMIT = 10
-_CONTROL_TIMESTEP = .02
+#_CONTROL_TIMESTEP = .02
+#_CONTROL_TIMESTEP = .01
+_CONTROL_TIMESTEP = .2
 _LONG_EPISODE_TIME_LIMIT = 20
 _SHORT_EPISODE_TIME_LIMIT = 10
 _TINY_EPISODE_TIME_LIMIT = 5
@@ -36,8 +38,6 @@ _BIG_TARGET = .05
 _SMALL_TARGET = .015
 
 # size of target in meters
-_CLOSE_TARGET_DISTANCE = .5
-_FAR_TARGET_DISTANCE = 1
 SUITE = containers.TaggedTasks()
 
 #D1 Base to shoulder 0.2755
@@ -83,78 +83,18 @@ def get_model_and_assets(xml_name):
     """Returns a tuple containing the model XML string and a dict of assets."""
     return common.read_model(xml_name), common.ASSETS
 
-@SUITE.add('benchmarking', 'reacher_medium')
-def reacher_medium(xml_name='jaco_j2s7s300_position.xml', random=None, fully_observable=True, fence={'x':(-1,1),'y':(-1,1),'z':(0.05,1.2)}, robot_server_ip='127.0.0.1', robot_server_port=9030, physics_type='mujoco', environment_kwargs={}):
-    """Returns reacher with sparse reward and small/far randomized target and fixed initial robot position."""
-    test_target_flag = True
-    if physics_type == 'robot':
-        physics = RobotPhysics()
-        physics.initialize(robot_server_ip, robot_server_port, fence)
-    else:
-        physics = MujocoPhysics.from_xml_string(*get_model_and_assets(xml_name))
-        physics.initialize(xml_name, random)
-    task = Jaco(target_size=_SMALL_TARGET, max_target_distance=_FAR_TARGET_DISTANCE, start_position='home', fence=fence, fully_observable=fully_observable, random=random)
-    return control.Environment(
-        physics, task, 
-        control_timestep=_CONTROL_TIMESTEP, time_limit=_LONG_EPISODE_TIME_LIMIT, 
-        **environment_kwargs)
-
-@SUITE.add('benchmarking', 'relative_reacher_medium')
-def relative_reacher_medium(xml_name='jaco_j2s7s300_position.xml', random=None, fully_observable=True, fence={'x':(-1,1),'y':(-1,1),'z':(0.05,1.2)}, robot_server_ip='127.0.0.1', robot_server_port=9030, physics_type='mujoco', environment_kwargs={}):
-    """Returns reacher with sparse reward and small/far randomized target and fixed initial robot position."""
-    test_target_flag = True
-    if physics_type == 'robot':
-        physics = RobotPhysics()
-        physics.initialize(robot_server_ip, robot_server_port, fence)
-    else:
-        physics = MujocoPhysics.from_xml_string(*get_model_and_assets(xml_name))
-        physics.initialize(xml_name, random)
-    task = Jaco(target_size=_SMALL_TARGET, max_target_distance=_FAR_TARGET_DISTANCE, start_position='home', fence=fence, fully_observable=fully_observable, random=random)
-    return control.Environment(
-        physics, task, 
-        control_timestep=_CONTROL_TIMESTEP, time_limit=_SHORT_EPISODE_TIME_LIMIT, 
-        **environment_kwargs)
-
-@SUITE.add('benchmarking', 'reacher_easy')
-def reacher_easy(xml_name='jaco_j2s7s300_position.xml', random=None, fence={'x':(-1,1),'y':(-1,1),'z':(0.05,1.2)}, fully_observable=True, robot_server_ip='127.0.0.1', robot_server_port=9030, physics_type='mujoco', environment_kwargs={}):
-    """Returns reacher with sparse reward and large/close randomized target and fixed initial robot position."""
-    test_target_flag = True
-    if physics_type == 'robot':
-        physics = RobotPhysics()
-        physics.initialize(robot_server_ip, robot_server_port, fence)
-    else:
-        physics = MujocoPhysics.from_xml_string(*get_model_and_assets(xml_name))
-        physics.initialize(xml_name, random)
-    task = Jaco(target_size=_BIG_TARGET, max_target_distance=_CLOSE_TARGET_DISTANCE, start_position='home', fence=fence, fully_observable=fully_observable, random=random)
-    # set n_sub_steps to repeat the action. since control_ts is at 1000 hz and real robot control ts is 50 hz, we repeat the action 20 times
-    return control.Environment(
-        physics, task, 
-        control_timestep=_CONTROL_TIMESTEP, time_limit=_SHORT_EPISODE_TIME_LIMIT, 
-        **environment_kwargs)
-
-@SUITE.add('benchmarking', 'relative_reacher_easy')
-def relative_reacher_easy(xml_name='jaco_j2s7s300_position.xml', random=None, fence={'x':(-1,1),'y':(-1,1),'z':(0.05,1.2)}, fully_observable=True, robot_server_ip='127.0.0.1', robot_server_port=9030, physics_type='mujoco', environment_kwargs={}):
-    """Returns reacher with sparse reward and large/close randomized target and fixed initial robot position."""
-    test_target_flag = True
-    if physics_type == 'robot':
-        physics = RobotPhysics()
-        physics.initialize(robot_server_ip, robot_server_port, fence)
-    else:
-        physics = MujocoPhysics.from_xml_string(*get_model_and_assets(xml_name))
-        physics.initialize(xml_name, random)
-    print("relative reacher easy random", random)
-    task = Jaco(target_size=_BIG_TARGET, max_target_distance=_CLOSE_TARGET_DISTANCE, 
-                start_position='home', fence=fence, fully_observable=fully_observable, random=random)
-    # set n_sub_steps to repeat the action. since control_ts is at 1000 hz and real robot control ts is 50 hz, we repeat the action 20 times
-    return control.Environment(
-        physics, task, 
-        control_timestep=_CONTROL_TIMESTEP, time_limit=_SHORT_EPISODE_TIME_LIMIT, 
-        **environment_kwargs)
-
-@SUITE.add('benchmarking', 'relative_reacher_baby')
-def relative_reacher_baby(xml_name='jaco_j2s7s300_position.xml', random=None, fully_observable=True, fence={'x':(-1,1),'y':(-1,1),'z':(0.05,1.2)}, target_position=[.2,-.5,.6], robot_server_ip='127.0.0.1', robot_server_port=9030, physics_type='mujoco', environment_kwargs={}):
-    """Returns reacher with sparse reward and large/close fixed target and fixed initial robot position."""
-    test_target_flag = True
+@SUITE.add('benchmarking', 'configurable_reacher')
+def configurable_reacher(xml_name='jaco_j2s7s300_position.xml', 
+                 random=None, fully_observable=True, 
+                 relative_step=False,
+                 fence={'x':(-1,1),'y':(-1,1),'z':(0.05,1.2)}, 
+                 target_position=[.2,-.5,.6], 
+                 target_type='random', 
+                 robot_server_ip='127.0.0.1', 
+                 start_position='home',
+                 robot_server_port=9030, 
+                 physics_type='mujoco', 
+                 environment_kwargs={}):
     if physics_type == 'robot':
         physics = RobotPhysics()
         physics.initialize(robot_server_ip, robot_server_port, fence)
@@ -162,12 +102,20 @@ def relative_reacher_baby(xml_name='jaco_j2s7s300_position.xml', random=None, fu
         physics = MujocoPhysics.from_xml_string(*get_model_and_assets(xml_name))
         physics.initialize(xml_name, random)
     task = Jaco(target_size=_BIG_TARGET,
-                start_position='home', fully_observable=fully_observable, random=random, target_type='fixed', target_position=target_position, fence=fence)
+                start_position='home', 
+                fully_observable=fully_observable, 
+                relative_step=relative_step,
+                random=random, 
+                target_type=target_type, 
+                target_position=target_position, 
+                fence=fence)
     # set n_sub_steps to repeat the action. since control_ts is at 1000 hz and real robot control ts is 50 hz, we repeat the action 20 times
     return control.Environment(
         physics, task, 
-        control_timestep=_CONTROL_TIMESTEP, time_limit=_TINY_EPISODE_TIME_LIMIT, 
+        control_timestep=_CONTROL_TIMESTEP,
+        time_limit=_LONG_EPISODE_TIME_LIMIT, 
         **environment_kwargs)
+
 
 class MujocoPhysics(mujoco.Physics):
     """Physics with additional features for the Planar Manipulator domain."""
@@ -240,7 +188,9 @@ class MujocoPhysics(mujoco.Physics):
     def set_robot_position_home(self):
         # TODO - should we ensure that the home position is within the fence? 
         #  we should setup walls in the xml sim
+        print("SETTING ROBOT HOME", self.home_joint_angles)
         self.set_robot_position(self.home_joint_angles)
+        print("ROBOT AT", self.get_joint_angles_radians())
 
     def set_robot_position(self, body_angles):
         # fingers are always last in xml - assume joint angles are for major joints to least major
@@ -266,6 +216,9 @@ class MujocoPhysics(mujoco.Physics):
         #TODO - will need to use tool pose rather than finger
         position_finger = self.named.data.xpos['jaco_link_finger_tip_1', ['x', 'y', 'z']]
         return position_finger
+
+    def action_spec(self):
+        return mujoco.action_spec(self)
 
 class RobotPhysics(robot.Physics):
     def set_pose_of_target(self, target_position, target_size):
@@ -311,7 +264,7 @@ class RobotPhysics(robot.Physics):
 class Jaco(base.Task):
     """A Bring `Task`: bring the prop to the target."""
 
-    def __init__(self, target_size, max_target_distance=1, start_position='home', degrees_of_freedom=7, extreme_joints=[4,6,7], fully_observable=True, relative_step=True, relative_rad_max=.7853, random=None, target_type='random', target_position=[.2,.2,.5], 
+    def __init__(self, target_size, start_position='home', degrees_of_freedom=7, extreme_joints=[4,6,7], fully_observable=True, relative_step=True, relative_rad_max=.1, random=None, target_type='random', target_position=[.2,.2,.5], 
             fence = {'x':(-1,1),'y':(-1,1),'z':(0.05,1.2)}):
         """Initialize an instance of `Jaco`.
 
@@ -339,7 +292,6 @@ class Jaco(base.Task):
         self.target_size = target_size
         # finger is ~.06  size
         self.radii = self.target_size + .15
-        self.max_target_distance = max_target_distance
         self.start_position = start_position
         print("STARTING RANDOM STATE WITH", random)
         self.random_state = np.random.RandomState(random)
@@ -377,15 +329,23 @@ class Jaco(base.Task):
         super(Jaco, self).__init__()
 
     def action_spec(self, physics):
+        spec = physics.action_spec()
         if self.relative_step:
-            # robot must use relative actions
             return specs.BoundedArray(shape=(self.DOF,), dtype=np.float, 
                                                            minimum=np.ones(self.DOF)*-self.relative_rad_max, 
                                                            maximum=np.ones(self.DOF)*self.relative_rad_max)
         else:
-            # this will only work if we are using Mujoco
+            # TODO this will only work if we are using Mujoco - add to robot
             spec = physics.action_spec()
-            return specs.BoundedArray(shape=(self.DOF,), dtype=np.float, minimum=spec.minimum[:self.DOF], maximum=spec.maximum[:self.DOF])
+            if spec.shape[0] == self.DOF:
+                return spec
+            # sometimes we only want to control a few joints
+            elif spec.shape[0] > self.DOF:
+                return specs.BoundedArray(shape=(self.DOF,), dtype=np.float, 
+                        minimum=spec.minimum[:self.DOF], 
+                        maximum=spec.maximum[:self.DOF])
+            else:
+                raise NotImplemented
 
     def _find_joint_coordinate_extremes(self, major_joint_angles):  
         """calculate xyz positions for joints form cartesian extremes
@@ -420,21 +380,24 @@ class Jaco(base.Task):
                 distance = tx + ty + tz
             self.target_position = np.array([tx,ty,tz])
         print('**setting target position of:', self.target_position)
-        #embed()
         physics.set_pose_of_target(self.target_position, self.target_size)
-        self.get_observation(physics)
         super(Jaco, self).initialize_episode(physics)
 
     def before_step(self, action, physics):
+        """
+        take in relative or absolute np.array of actions of length self.DOF
+        if relative mode, action will be relative to the current state
+        """
         self.hit_penalty = 0.0
+        use_action = action 
+        # need action to be same shape as number of actuators
         if self.relative_step:
             use_action = np.clip(action, -self.relative_rad_max, self.relative_rad_max)
-            use_action = [self.joint_angles[x]+use_action[x] for x in range(len(use_action))]
-        else:
-            use_action = action
-        # dont requeire all joints 
+            # TODO - check if deepcoy is necessary 
+            use_action += deepcopy(self.joint_angles[:self.DOF])
+        ## dont requeire all joints 
         if len(use_action) < physics.n_actuators:
-            use_action.extend(self.joint_angles[len(use_action):])
+            use_action = np.hstack((use_action, self.joint_angles[len(use_action):]))
         self.safe_step = True
         joint_extremes = self._find_joint_coordinate_extremes(use_action[:self.DOF])
         for xx,joint_xyz in enumerate(joint_extremes):
@@ -443,14 +406,8 @@ class Jaco(base.Task):
                 self.hit_penalty -= 1
                 self.safe_step = False
                 #print('joint {} will hit at ({},{},{}) at requested joint position - blocking action'.format(self.extreme_joints[xx], *good_xyz))
-                break
 
-        # THIS DOESN"T work because there is some noise 
-        #if not self.safe_step:
-        #    use_action = self.joint_angles
-        ##print('use action', use_action)
         super(Jaco, self).before_step(use_action, physics)
-
 
     def get_observation(self, physics):
         """Returns either features or only sensors (to be used with pixels)."""
@@ -465,13 +422,13 @@ class Jaco(base.Task):
         obs['joint_forces'] = physics.get_actuator_force()
         obs['joint_velocity'] = physics.get_actuator_velocity()
         obs['joint_extremes'] = joint_extremes
-        obs['joint_1_xpos'] = physics.named.data.xpos['jaco_link_1', ['x','y','z']]
-        obs['joint_2_xpos'] = physics.named.data.xpos['jaco_link_2', ['x','y','z']]
-        obs['joint_3_xpos'] = physics.named.data.xpos['jaco_link_3', ['x','y','z']]
-        obs['joint_4_xpos'] = physics.named.data.xpos['jaco_link_4', ['x','y','z']]
-        obs['joint_5_xpos'] = physics.named.data.xpos['jaco_link_5', ['x','y','z']]
-        obs['joint_6_xpos'] = physics.named.data.xpos['jaco_link_6', ['x','y','z']]
-        obs['joint_7_xpos'] = physics.named.data.xpos['jaco_link_7', ['x','y','z']]
+        #obs['joint_1_xpos'] = physics.named.data.xpos['jaco_link_1', ['x','y','z']]
+        #obs['joint_2_xpos'] = physics.named.data.xpos['jaco_link_2', ['x','y','z']]
+        #obs['joint_3_xpos'] = physics.named.data.xpos['jaco_link_3', ['x','y','z']]
+        #obs['joint_4_xpos'] = physics.named.data.xpos['jaco_link_4', ['x','y','z']]
+        #obs['joint_5_xpos'] = physics.named.data.xpos['jaco_link_5', ['x','y','z']]
+        #obs['joint_6_xpos'] = physics.named.data.xpos['jaco_link_6', ['x','y','z']]
+        #obs['joint_7_xpos'] = physics.named.data.xpos['jaco_link_7', ['x','y','z']]
         return obs
 
     def get_distance(self, position_1, position_2):

@@ -53,7 +53,9 @@
     <!-- wall_y is facing the side where the power cables come into the robot -->
     <!--
 -->
+<!--
     <geom name="table" type="plane" pos="-.3 -.15 0" zaxis="0 0 1" size=".91 .3 .1" material="light_wood_v2"/>
+-->
 
     <geom name="target" pos="1 1 1" material="target" type="sphere" size=".05" friction="0" condim="1"/>
 

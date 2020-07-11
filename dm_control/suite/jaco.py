@@ -94,6 +94,7 @@ def configurable_reacher(xml_name='jaco_j2s7s300_position.xml',
                  start_position='home',
                  robot_server_port=9030, 
                  physics_type='mujoco', 
+                 action_penalty=False,
                  environment_kwargs={}):
     if physics_type == 'robot':
         physics = RobotPhysics()
@@ -108,6 +109,7 @@ def configurable_reacher(xml_name='jaco_j2s7s300_position.xml',
                 random=random, 
                 target_type=target_type, 
                 target_position=target_position, 
+                action_penalty=action_penalty,
                 fence=fence)
     # set n_sub_steps to repeat the action. since control_ts is at 1000 hz and real robot control ts is 50 hz, we repeat the action 20 times
     return control.Environment(
@@ -182,15 +184,12 @@ class MujocoPhysics(mujoco.Physics):
 
     def reset(self):
         super(MujocoPhysics, self).reset()
-        print("RESETTING")
         self.set_robot_position_home()
 
     def set_robot_position_home(self):
         # TODO - should we ensure that the home position is within the fence? 
         #  we should setup walls in the xml sim
-        print("SETTING ROBOT HOME", self.home_joint_angles)
         self.set_robot_position(self.home_joint_angles)
-        print("ROBOT AT", self.get_joint_angles_radians())
 
     def set_robot_position(self, body_angles):
         # fingers are always last in xml - assume joint angles are for major joints to least major
@@ -265,7 +264,7 @@ class Jaco(base.Task):
     """A Bring `Task`: bring the prop to the target."""
 
     def __init__(self, target_size, start_position='home', degrees_of_freedom=7, extreme_joints=[4,6,7], fully_observable=True, relative_step=True, relative_rad_max=.1, random=None, target_type='random', target_position=[.2,.2,.5], 
-            fence = {'x':(-1,1),'y':(-1,1),'z':(0.05,1.2)}):
+            fence = {'x':(-1,1),'y':(-1,1),'z':(0.05,1.2)}, action_penalty=False):
         """Initialize an instance of `Jaco`.
 
         Args:
@@ -286,6 +285,8 @@ class Jaco(base.Task):
         self.DOF = degrees_of_freedom
         self.fence = fence
         self.hit_penalty = 0.0
+        self.action_penalty = 0.0
+        self.use_action_penalty = bool(action_penalty)
 
         # EXTREME JOINT CALCULATIONS ARE WRONG SOMEHOW ON THE REAL ROBOT
         self.extreme_joints = extreme_joints
@@ -379,7 +380,7 @@ class Jaco(base.Task):
                 # use max arm length distance of 1
                 distance = tx + ty + tz
             self.target_position = np.array([tx,ty,tz])
-        print('**setting target position of:', self.target_position)
+        print('**setting new target position of:', self.target_position)
         physics.set_pose_of_target(self.target_position, self.target_size)
         super(Jaco, self).initialize_episode(physics)
 
@@ -393,6 +394,8 @@ class Jaco(base.Task):
         # need action to be same shape as number of actuators
         if self.relative_step:
             use_action = np.clip(action, -self.relative_rad_max, self.relative_rad_max)
+            if self.use_action_penalty:
+                self.action_penalty = -np.square(action).sum()
             # TODO - check if deepcoy is necessary 
             use_action += deepcopy(self.joint_angles[:self.DOF])
         ## dont requeire all joints 
@@ -403,7 +406,7 @@ class Jaco(base.Task):
         for xx,joint_xyz in enumerate(joint_extremes):
             good_xyz, hit = trim_and_check_pose_safety(joint_xyz, self.fence)
             if hit:
-                self.hit_penalty -= 1
+                self.hit_penalty -= 1.0
                 self.safe_step = False
                 #print('joint {} will hit at ({},{},{}) at requested joint position - blocking action'.format(self.extreme_joints[xx], *good_xyz))
 
@@ -438,4 +441,4 @@ class Jaco(base.Task):
     def get_reward(self, physics):
         """Returns a sparse reward to the agent."""
         distance = self.get_distance(physics.get_tool_coordinates(), self.target_position)
-        return rewards.tolerance(distance, (0, self.radii)) + self.hit_penalty
+        return rewards.tolerance(distance, (0, self.radii)) + self.hit_penalty + self.action_penalty

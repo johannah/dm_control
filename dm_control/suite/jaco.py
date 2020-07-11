@@ -68,7 +68,7 @@ def relative_position_reacher_7DOF(random=None, fence={'x':(-1,1),'y':(-1,1),'z'
     xml_name='jaco_j2s7s300_position.xml'
     start_position='home'
     fully_observable=True 
-    action_penalty=False
+    action_penalty=True
     relative_step=True 
     relative_rad_max=.1
     fence=fence 
@@ -278,7 +278,7 @@ class RobotPhysics(robot.Physics):
         return self.actuator_position
 
     def get_tool_coordinates(self):
-        # TODO is this joint 7 or tool pose?
+        #  tool pose is fingertips
         return self._find_joint_coordinate_extremes(self.get_joint_angles_radians())[-1]
 
     def get_tool_pose(self):
@@ -321,7 +321,7 @@ class Jaco(base.Task):
         self.DOF = degrees_of_freedom
         self.fence = fence
         self.use_action_penalty = bool(action_penalty)
-        self.extreme_joints = extreme_joints
+        self.extreme_joints = np.array(extreme_joints)
         self.target_size = target_size
         # finger is ~.06  size
         self.radii = self.target_size + .15
@@ -353,7 +353,6 @@ class Jaco(base.Task):
             #D6 Second wrist length 0.1038
             #D7 Wrist to center of the hand 0.1600
             #e2 Joint 3-4 lateral offset 0.0098
-
 
             # Params for Denavit-Hartenberg Reference Frame Layout (DH)
             self.DH_lengths =  {'D1':0.2755, 'D2':0.2050, 
@@ -398,17 +397,44 @@ class Jaco(base.Task):
     def _find_joint_coordinate_extremes(self, major_joint_angles):  
         """calculate xyz positions for joints form cartesian extremes
         major_joint_angles: ordered list of joint angles in radians (len 7 for 7DOF arm)"""
+        """ July 11 2020 - 
+        JRH sanity checked these values by setting the real 7DOF Jaco 2 robot to the "home position" 
+        and measured the physical robot against the DH calculations of extreme joints.
+        In this function, we care about the elbow (joint 4), wrist, (joint6) and tool pose (fingertips)
+
+        home_joint_angles = np.array([4.92,    # 283 deg
+                                      2.839,   # 162.709854126
+                                      0.,       # 0 
+                                      .758,    # 43.43
+                                      4.6366,  # 265.66
+                                      4.493,   # 257.47
+                                      5.0249,  # 287.9
+        The result of _find_joint_coordinate_extremes([4.92,2.839,0.,.758,4.6366,4.493,5.0249]) is the following (in meters):
+        array([[-0.   ,  0.   ,  0.276],
+                 [-0.   ,  0.   ,  0.276],
+                 [ 0.025,  0.12 ,  0.667],
+                 [ 0.016,  0.122,  0.667],
+                 [-0.04 , -0.144,  0.515],
+                 [-0.04 , -0.144,  0.515],
+                 [-0.304, -0.149,  0.504]]
+         
+        Unfortunately, I only have an Imperial tape measure, so converting to inches first:
+        ---
+        index   xm         ym       zm      xin       yin       zin        measured_description
+        6       -.304     -.149     .504    -11.9685  -5.866    19.685     finger tips!  this is appropriate to use for tool pose
+        5       -.04      -.144     .515    1.57      5.66      20.27      middle of joint 6 starting with 1 joint indexing
+        3       .016      .122      .667    .629      4.8       26.25      joint 4 starting with 1 joint indexing
+        """
         extreme_xyz = []
         Tall = DHtransform(0.0,0.0,0.0,np.pi)
         for i, angle in enumerate(major_joint_angles):
             DH_theta = self.DH_theta_sign[i]*angle + self.DH_theta_offset[i]
             T = DHtransform(self.DH_d[i], DH_theta, self.DH_a[i], self.DH_alpha[i])
             Tall = np.dot(Tall, T)
-         
-            if i+1 in self.extreme_joints:
-                # x is backwards of reality - this warrants investigation
-                extreme_xyz.append([-Tall[0,3], Tall[1,3], Tall[2,3]])
-        return np.array(extreme_xyz)
+            #if i+1 in self.extreme_joints:
+            # x is backwards of reality - this warrants investigation
+            extreme_xyz.append([-Tall[0,3], Tall[1,3], Tall[2,3]])
+        return np.array(extreme_xyz)[self.extreme_joints-1]
 
     def initialize_episode(self, physics):
         """Sets the state of the environment at the start of each episode."""
@@ -452,6 +478,7 @@ class Jaco(base.Task):
         if len(use_action) < physics.n_actuators:
             use_action = np.hstack((use_action, self.joint_angles[len(use_action):]))
         self.safe_step = True
+        # TODO below only deals with major joints so self.DOF really isn't the right indexer
         joint_extremes = self._find_joint_coordinate_extremes(use_action[:self.DOF])
         for xx,joint_xyz in enumerate(joint_extremes):
             good_xyz, hit = trim_and_check_pose_safety(joint_xyz, self.fence)

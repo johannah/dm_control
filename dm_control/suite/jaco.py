@@ -186,9 +186,12 @@ class MujocoPhysics(mujoco.Physics):
             joint7: -179.722869873
             ---
             """    
+            # hand joint is fully open at 0 rads !! it seems like robot is different
+            # hand fingertips are closed at [1.1,1.1,1.1,0,0,0]
             # when 7dof is reaching for sky
+                
             self.sky_joint_angles = np.array([-6.27,3.27,5.17,3.24,0.234,3.54,3.14,
-                                      1.,1.,1.,1.,1.,1.])
+                                      1.1,0.0,1.1,0.0,1.1,0.])
             ## approx loc on home on real 7dof jaco2 robot
             self.sleep_joint_angles = np.array([4.71,  # 270 deg
                                       2.61,   # 150
@@ -197,7 +200,8 @@ class MujocoPhysics(mujoco.Physics):
                                       6.28,   # 360
                                       3.7,    # 212
                                       3.14,   # 180
-                                      1., 1., 1., 1., 1., 1.])
+                                      1.1,0.1,1.1,0.1,1.1,0.1])
+            # true home on the robot has the fingers open
             self.home_joint_angles = np.array([4.92,    # 283 deg
                                       2.839,   # 162.709854126
                                       0,       # 0 
@@ -205,7 +209,7 @@ class MujocoPhysics(mujoco.Physics):
                                       4.6366,  # 265.66
                                       4.493,   # 257.47
                                       5.0249,  # 287.9
-                                      1., 1., 1., 1., 1., 1.])
+                                      1.1,0.1,1.1,0.1,1.1,0.1])
         else:
             raise ValueError('unknown or unconfigured robot type')
  
@@ -244,10 +248,10 @@ class MujocoPhysics(mujoco.Physics):
     def get_joint_coordinates(self):
         return self.named.data.geom_xpos.copy()[1:self.n_actuators+1]
 
-    def get_tool_coordinates(self):
-        #TODO - will need to use tool pose rather than finger
-        position_finger = self.named.data.xpos[self.DOF, ['x', 'y', 'z']]
-        return position_finger
+#    def get_tool_coordinates(self):
+#        #TODO - will need to use tool pose rather than finger
+#        position_tool = self.named.data.xpos[self.DOF, ['x', 'y', 'z']]
+#        return tool
 
     def action_spec(self):
         return mujoco.action_spec(self)
@@ -277,13 +281,13 @@ class RobotPhysics(robot.Physics):
         # only return last joint orientation
         return self.actuator_position
 
-    def get_tool_coordinates(self):
-        #  tool pose is fingertips
-        return self._find_joint_coordinate_extremes(self.get_joint_angles_radians())[-1]
+#    def get_tool_coordinates(self):
+#        #  tool pose is fingertips
+#        return self.tool_pose[:3]
 
-    def get_tool_pose(self):
-        return self.tool_pose
-
+#    def get_tool_pose(self):
+#        return self.tool_pose
+#
     def set_robot_position_home(self):
         return self.robot_client.home()
 
@@ -324,19 +328,23 @@ class Jaco(base.Task):
         self.extreme_joints = np.array(extreme_joints)
         self.target_size = target_size
         # finger is ~.06  size
-        self.radii = self.target_size + .15
+        self.radii = self.target_size + .08
         self.start_position = start_position
         self.random_state = np.random.RandomState(random)
         self._fully_observable = fully_observable
         self.hit_penalty = 0.0
         self.action_penalty = 0.0
+        # TODO are open/close opposite on robot??
+        self.opened_hand_position = np.zeros(6)
+        self.closed_hand_position = np.array([1.1,0.1,1.1,0.1,1.1,0.1])
+
         # find target min/max using fence and considering table obstacle and arm reach
-        self.target_minx = max([min(self.fence['x'])]+[-.75])+self.target_size
-        self.target_maxx = min([max(self.fence['x'])]+[.75])-self.target_size
-        self.target_miny = max([min(self.fence['y'])]+[-.5])+self.target_size
-        self.target_maxy = min([max(self.fence['y'])]+[.75])-self.target_size
-        self.target_minz = max([min(self.fence['z'])]+[0.01])+self.target_size
-        self.target_maxz = min([max(self.fence['z'])]+[1.0])-self.target_size
+        self.target_minx = max([min(self.fence['x'])]+[-.8])
+        self.target_maxx = min([max(self.fence['x'])]+[.8])
+        self.target_miny = max([min(self.fence['y'])]+[-.8])
+        self.target_maxy = min([max(self.fence['y'])]+[.8])
+        self.target_minz = max([min(self.fence['z'])]+[0.1])
+        self.target_maxz = min([max(self.fence['z'])]+[.8])
         print('Jaco received virtual fence of:', self.fence)
         print('limiting target to x:({},{}), y:({},{}), z:({},{})'.format(
                                self.target_minx, self.target_maxx,
@@ -375,12 +383,17 @@ class Jaco(base.Task):
 
         super(Jaco, self).__init__()
 
+    def observation_spec(self, physics):
+        self.after_step(physics)
+        super(Jaco, self).observation_spec(physics)
+
     def action_spec(self, physics):
         spec = physics.action_spec()
         if self.relative_step:
-            return specs.BoundedArray(shape=(self.DOF,), dtype=np.float, 
+            spec = specs.BoundedArray(shape=(self.DOF,), dtype=np.float, 
                                                            minimum=np.ones(self.DOF)*-self.relative_rad_max, 
                                                            maximum=np.ones(self.DOF)*self.relative_rad_max)
+            return spec
         else:
             # TODO this will only work if we are using Mujoco - add to robot
             spec = physics.action_spec()
@@ -393,7 +406,7 @@ class Jaco(base.Task):
                         maximum=spec.maximum[:self.DOF])
             else:
                 raise NotImplemented
-
+        
     def _find_joint_coordinate_extremes(self, major_joint_angles):  
         """calculate xyz positions for joints form cartesian extremes
         major_joint_angles: ordered list of joint angles in radians (len 7 for 7DOF arm)"""
@@ -458,6 +471,7 @@ class Jaco(base.Task):
             raise ValueError; print('unknown target_type: fixed or random are required but was set to {}'.format(self.target_type))
         print('**setting new target position of:', self.target_position)
         physics.set_pose_of_target(self.target_position, self.target_size)
+        self.after_step(physics)
         super(Jaco, self).initialize_episode(physics)
 
     def before_step(self, action, physics):
@@ -469,17 +483,19 @@ class Jaco(base.Task):
         use_action = action 
         # need action to be same shape as number of actuators
         if self.relative_step:
-            use_action = np.clip(action, -self.relative_rad_max, self.relative_rad_max)
+            relative_action = np.clip(action, -self.relative_rad_max, self.relative_rad_max)
+            #print('relative action', use_action)
             if self.use_action_penalty:
-                self.action_penalty = -np.square(action).sum()
-            # TODO - check if deepcoy is necessary 
-            use_action += deepcopy(self.joint_angles[:self.DOF])
-        ## dont requeire all joints 
+                self.action_penalty = -np.square(relative_action).sum()
+            #print('joint_angles', self.joint_angles)
+            use_action = relative_action+self.joint_angles[:len(use_action)]
+            #print('after adding', use_action)
+        ## TODO fix below to make more robust
         if len(use_action) < physics.n_actuators:
-            use_action = np.hstack((use_action, self.joint_angles[len(use_action):]))
+            use_action = np.hstack((use_action, self.closed_hand_position))
         self.safe_step = True
         # TODO below only deals with major joints so self.DOF really isn't the right indexer
-        joint_extremes = self._find_joint_coordinate_extremes(use_action[:self.DOF])
+        joint_extremes = self._find_joint_coordinate_extremes(use_action[:7])
         for xx,joint_xyz in enumerate(joint_extremes):
             good_xyz, hit = trim_and_check_pose_safety(joint_xyz, self.fence)
             if hit:
@@ -487,22 +503,28 @@ class Jaco(base.Task):
                 self.safe_step = False
                 #print('joint {} will hit at ({},{},{}) at requested joint position - blocking action'.format(self.extreme_joints[xx], *good_xyz))
 
+        #print('use_action', use_action)
         super(Jaco, self).before_step(use_action, physics)
 
+    def after_step(self, physics):
+        self.joint_angles = deepcopy(physics.get_joint_angles_radians())
+        #print('after step', self.joint_angles)
+        self.joint_extremes = self._find_joint_coordinate_extremes(self.joint_angles[:7])
+        self.tool_pose = self.joint_extremes[-1]
+ 
     def get_observation(self, physics):
         """Returns either features or only sensors (to be used with pixels)."""
         # TODO we are only handling full_observations now
         # TODO is timestep needed?? may be important for Torque controlled on real robot
         obs = collections.OrderedDict()
-        self.joint_angles = physics.get_joint_angles_radians()
-        # joint position starts as all zeros 
-        joint_extremes = self._find_joint_coordinate_extremes(self.joint_angles[:self.DOF])
         #obs['timestep'] = physics.get_timestep()
-        obs['to_target'] = self.target_position-physics.get_tool_coordinates()
+        self.joint_angles = deepcopy(physics.get_joint_angles_radians())
+        #print('observation', self.joint_angles)
+        obs['to_target'] = self.target_position-self.tool_pose
         obs['joint_angles'] = self.joint_angles
         obs['joint_forces'] = physics.get_actuator_force()
         obs['joint_velocity'] = physics.get_actuator_velocity()
-        obs['joint_extremes'] = joint_extremes
+        obs['joint_extremes'] = self.joint_extremes
         return obs
 
     def get_distance(self, position_1, position_2):
@@ -511,5 +533,5 @@ class Jaco(base.Task):
 
     def get_reward(self, physics):
         """Returns a sparse reward to the agent."""
-        distance = self.get_distance(physics.get_tool_coordinates(), self.target_position)
+        distance = self.get_distance(self.tool_pose, self.target_position)
         return rewards.tolerance(distance, (0, self.radii)) + self.hit_penalty + self.action_penalty

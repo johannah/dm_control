@@ -248,10 +248,10 @@ class MujocoPhysics(mujoco.Physics):
     def get_joint_coordinates(self):
         return self.named.data.geom_xpos.copy()[1:self.n_actuators+1]
 
-#    def get_tool_coordinates(self):
-#        #TODO - will need to use tool pose rather than finger
-#        position_tool = self.named.data.xpos[self.DOF, ['x', 'y', 'z']]
-#        return tool
+    def get_tool_coordinates(self):
+        #TODO - will need to use tool pose rather than finger
+        tool_pose = self.named.data.xpos['jaco_link_finger_tip_1', ['x', 'y', 'z']]
+        return tool_pose
 
     def action_spec(self):
         return mujoco.action_spec(self)
@@ -281,13 +281,10 @@ class RobotPhysics(robot.Physics):
         # only return last joint orientation
         return self.actuator_position
 
-#    def get_tool_coordinates(self):
-#        #  tool pose is fingertips
-#        return self.tool_pose[:3]
+    def get_tool_coordinates(self):
+        #  tool pose is fingertips
+        return self.tool_pose[:3]
 
-#    def get_tool_pose(self):
-#        return self.tool_pose
-#
     def set_robot_position_home(self):
         return self.robot_client.home()
 
@@ -328,7 +325,7 @@ class Jaco(base.Task):
         self.extreme_joints = np.array(extreme_joints)
         self.target_size = target_size
         # finger is ~.06  size
-        self.radii = self.target_size + .08
+        self.radii = self.target_size + .1
         self.start_position = start_position
         self.random_state = np.random.RandomState(random)
         self._fully_observable = fully_observable
@@ -487,10 +484,11 @@ class Jaco(base.Task):
             #print('relative action', use_action)
             if self.use_action_penalty:
                 self.action_penalty = -np.square(relative_action).sum()
-            #print('joint_angles', self.joint_angles)
             use_action = relative_action+self.joint_angles[:len(use_action)]
-            #print('after adding', use_action)
-        ## TODO fix below to make more robust
+        else:
+            if self.use_action_penalty:
+                raise NotImplemented; print("action penalty with abs step not implemented")
+
         if len(use_action) < physics.n_actuators:
             use_action = np.hstack((use_action, self.closed_hand_position))
         self.safe_step = True
@@ -503,14 +501,12 @@ class Jaco(base.Task):
                 self.safe_step = False
                 #print('joint {} will hit at ({},{},{}) at requested joint position - blocking action'.format(self.extreme_joints[xx], *good_xyz))
 
-        #print('use_action', use_action)
         super(Jaco, self).before_step(use_action, physics)
 
     def after_step(self, physics):
         self.joint_angles = deepcopy(physics.get_joint_angles_radians())
-        #print('after step', self.joint_angles)
-        self.joint_extremes = self._find_joint_coordinate_extremes(self.joint_angles[:7])
-        self.tool_pose = self.joint_extremes[-1]
+        self.joint_extremes = deepcopy(self._find_joint_coordinate_extremes(self.joint_angles[:7]))
+        self.tool_position = deepcopy(physics.get_tool_coordinates())
  
     def get_observation(self, physics):
         """Returns either features or only sensors (to be used with pixels)."""
@@ -518,13 +514,17 @@ class Jaco(base.Task):
         # TODO is timestep needed?? may be important for Torque controlled on real robot
         obs = collections.OrderedDict()
         #obs['timestep'] = physics.get_timestep()
-        self.joint_angles = deepcopy(physics.get_joint_angles_radians())
         #print('observation', self.joint_angles)
-        obs['to_target'] = self.target_position-self.tool_pose
+        obs['to_target'] = self.target_position-self.tool_position
         obs['joint_angles'] = self.joint_angles
         obs['joint_forces'] = physics.get_actuator_force()
         obs['joint_velocity'] = physics.get_actuator_velocity()
         obs['joint_extremes'] = self.joint_extremes
+        obs['tool_position'] = self.tool_position
+        obs['jaco_link_4'] = physics.named.data.xpos['jaco_link_4']
+        obs['jaco_link_6'] = physics.named.data.xpos['jaco_link_6']
+        obs['jaco_link_finger_tip_1'] = physics.named.data.xpos['jaco_link_finger_tip_1']
+        obs['target_position'] = self.target_position
         return obs
 
     def get_distance(self, position_1, position_2):
@@ -533,5 +533,6 @@ class Jaco(base.Task):
 
     def get_reward(self, physics):
         """Returns a sparse reward to the agent."""
-        distance = self.get_distance(self.tool_pose, self.target_position)
-        return rewards.tolerance(distance, (0, self.radii)) + self.hit_penalty + self.action_penalty
+        distance = self.get_distance(self.tool_position, self.target_position)
+        #return rewards.tolerance(distance, (0, self.radii)) + self.hit_penalty + self.action_penalty
+        return distance

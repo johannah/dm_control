@@ -274,11 +274,11 @@ I think the vel range may be too low - 100 deg per sec on joint 7 is really slow
     <!-- joint 2: kp=100 for joint 2 is too low for it to fight gravity -->
     <!-- joint 2: kp=200 for joint 2 seems good -->
     <position joint='jaco_joint_2'  name='pos_act_joint_2' kp="3000"  ctrlrange='.8 5.46' ctrllimited='true'/>
-    <position joint='jaco_joint_3'  name='pos_act_joint_3' kp="1000"  ctrlrange='-628 628' ctrllimited='true'/>
+    <position joint='jaco_joint_3'  name='pos_act_joint_3' kp="2000"  ctrlrange='-628 628' ctrllimited='true'/>
     <position joint='jaco_joint_4'  name='pos_act_joint_4' kp="3000"  ctrlrange='.5 5.759' ctrllimited='true'/>
-    <position joint='jaco_joint_5'  name='pos_act_joint_5' kp="500"   ctrlrange='-628 628' ctrllimited='true'/>
-    <position joint='jaco_joint_6'  name='pos_act_joint_6' kp="500"   ctrlrange='1.1344 5.148' ctrllimited='true'/>
-    <position joint='jaco_joint_7'  name='pos_act_joint_7' kp="500"   ctrlrange='-628 628' ctrllimited='true'/>
+    <position joint='jaco_joint_5'  name='pos_act_joint_5' kp="700"   ctrlrange='-628 628' ctrllimited='true'/>
+    <position joint='jaco_joint_6'  name='pos_act_joint_6' kp="700"   ctrlrange='1.1344 5.148' ctrllimited='true'/>
+    <position joint='jaco_joint_7'  name='pos_act_joint_7' kp="700"   ctrlrange='-628 628' ctrllimited='true'/>
     <position joint='jaco_joint_finger_1' name='pos_act_finger_1'          kp="700"  ctrlrange="0 1.51" ctrllimited="true"/>
     <position joint='jaco_joint_finger_tip_1'  name='pos_act_finger_tip_1' kp="700" ctrlrange="0 2" ctrllimited="true"/>
     <position joint='jaco_joint_finger_2' name='pos_act_finger_2'          kp="700"  ctrlrange="0 1.51" ctrllimited="true"/>

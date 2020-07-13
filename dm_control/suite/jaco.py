@@ -30,6 +30,13 @@ _SMALL_TARGET = .015
 # size of target in meters
 SUITE = containers.TaggedTasks()
 
+def DHtransformEL(d,theta,a,alpha):
+    T = np.array([[np.cos(theta), -np.sin(theta)*np.cos(alpha), np.sin(theta)*np.sin(alpha),a*np.cos(theta)],
+                                [np.sin(theta), np.cos(theta)*np.cos(alpha), -np.cos(theta)*np.sin(alpha),a*np.sin(theta)],
+                                [0, np.sin(alpha), np.cos(alpha),d],
+                                [0,0,0,1]])
+    return T
+
 def DHtransform(d,theta,a,alpha):
     rotation_matrix = np.array([[np.cos(theta), -np.sin(theta)*np.cos(alpha), np.sin(theta)*np.sin(alpha)],
                                 [np.sin(theta), np.cos(theta)*np.cos(alpha), -np.cos(theta)*np.sin(alpha)],
@@ -68,7 +75,7 @@ def relative_position_reacher_7DOF(random=None, fence={'x':(-1,1),'y':(-1,1),'z'
     xml_name='jaco_j2s7s300_position.xml'
     start_position='home'
     fully_observable=True 
-    action_penalty=True
+    action_penalty=False
     relative_step=True 
     relative_rad_max=.1
     fence=fence 
@@ -192,6 +199,9 @@ class MujocoPhysics(mujoco.Physics):
                 
             self.sky_joint_angles = np.array([-6.27,3.27,5.17,3.24,0.234,3.54,3.14,
                                       1.1,0.0,1.1,0.0,1.1,0.])
+            self.out_joint_angles = np.array([-6.27,1,5.17,3.24,0.234,3.54,3.14,
+                                      1.1,0.0,1.1,0.0,1.1,0.])
+ 
             ## approx loc on home on real 7dof jaco2 robot
             self.sleep_joint_angles = np.array([4.71,  # 270 deg
                                       2.61,   # 150
@@ -226,7 +236,8 @@ class MujocoPhysics(mujoco.Physics):
     def set_robot_position_home(self):
         # TODO - should we ensure that the home position is within the fence? 
         #  we should setup walls in the xml sim
-        self.set_robot_position(self.home_joint_angles)
+        #self.set_robot_position(self.home_joint_angles)
+        self.set_robot_position(self.out_joint_angles)
 
     def set_robot_position(self, body_angles):
         # fingers are always last in xml - assume joint angles are for major joints to least major
@@ -250,13 +261,14 @@ class MujocoPhysics(mujoco.Physics):
 
     def get_tool_coordinates(self):
         #TODO - will need to use tool pose rather than finger
-        tool_pose = self.named.data.xpos['jaco_link_finger_tip_1', ['x', 'y', 'z']]
+        tool_pose = self.named.data.xpos['jaco_link_finger_1', ['x', 'y', 'z']]
         return tool_pose
 
     def action_spec(self):
         return mujoco.action_spec(self)
 
 class RobotPhysics(robot.Physics):
+    #TODO the joint order is different for the robot and mujoco fingers - robot has major fingers, then tips. mujoco has each finger, then its tip
     def set_pose_of_target(self, target_position, target_size):
         self.target_position = target_position
 
@@ -376,7 +388,9 @@ class Jaco(base.Task):
                          0, 
                          -(self.DH_lengths['D6']+self.DH_lengths['D7']))
             self.DH_alpha = (np.pi/2.0, np.pi/2.0, np.pi/2.0, np.pi/2.0, np.pi/2.0, np.pi/2.0, np.pi)
-            self.DH_theta_offset = (0, 0, 0, 0, 0, 0, 0)
+            #self.DH_theta_offset = (0, 0, 0, 0, 0, 0, 0)
+            #self.DH_theta_offset = (0.0, 0., 0., 0., 0., 0.0, np.pi/2.0)
+            self.DH_theta_offset = (np.pi, 0., 0., 0., 0., 0.0, np.pi/2.0)
 
         super(Jaco, self).__init__()
 
@@ -436,15 +450,18 @@ class Jaco(base.Task):
         3       .016      .122      .667    .629      4.8       26.25      joint 4 starting with 1 joint indexing
         """
         extreme_xyz = []
-        Tall = DHtransform(0.0,0.0,0.0,np.pi)
+
+        # for 7DOF robot only!
+        Tall = DHtransformEL(d=0.0,theta=0.0,a=0.0,alpha=np.pi)
         for i, angle in enumerate(major_joint_angles):
             DH_theta = self.DH_theta_sign[i]*angle + self.DH_theta_offset[i]
-            T = DHtransform(self.DH_d[i], DH_theta, self.DH_a[i], self.DH_alpha[i])
+            T = DHtransformEL(self.DH_d[i], DH_theta, self.DH_a[i], self.DH_alpha[i])
             Tall = np.dot(Tall, T)
             #if i+1 in self.extreme_joints:
             # x is backwards of reality - this warrants investigation
-            extreme_xyz.append([-Tall[0,3], Tall[1,3], Tall[2,3]])
-        return np.array(extreme_xyz)[self.extreme_joints-1]
+            extreme_xyz.append([Tall[0,3], Tall[1,3], Tall[2,3]])
+        extremes = np.array(extreme_xyz)[self.extreme_joints-1]
+        return extremes
 
     def initialize_episode(self, physics):
         """Sets the state of the environment at the start of each episode."""
@@ -520,6 +537,7 @@ class Jaco(base.Task):
         obs['joint_forces'] = physics.get_actuator_force()
         obs['joint_velocity'] = physics.get_actuator_velocity()
         obs['joint_extremes'] = self.joint_extremes
+        # DEBUG vars
         obs['tool_position'] = self.tool_position
         obs['jaco_link_4'] = physics.named.data.xpos['jaco_link_4']
         obs['jaco_link_6'] = physics.named.data.xpos['jaco_link_6']
@@ -534,5 +552,4 @@ class Jaco(base.Task):
     def get_reward(self, physics):
         """Returns a sparse reward to the agent."""
         distance = self.get_distance(self.tool_position, self.target_position)
-        #return rewards.tolerance(distance, (0, self.radii)) + self.hit_penalty + self.action_penalty
-        return distance
+        return rewards.tolerance(distance, (0, self.radii)) + self.hit_penalty + self.action_penalty

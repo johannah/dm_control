@@ -48,6 +48,8 @@
 
     <!-- <camera name="topview" pos="0 0 2" zaxis="0 0 1" fovy="45" ipd="0.068"/> -->
     <camera name="topview" pos="-.2 -.2 1.4" quat="1 0 0 0" fovy="70"/>
+    <!-- <camera name="negquadview" pos="-1 -1 .4" quat="0 0 1 0" fovy="70"/> -->
+    <camera name="lookat4" mode="targetbodycom" target="jaco_link_4" pos="-1 -1 .5"/>
 
     <!-- constrain on by placing fences in plane size is the "radius" of the rectangle (.5 h or w)--> 
     <!-- wall_y is facing the side where the power cables come into the robot -->

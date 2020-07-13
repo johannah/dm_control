@@ -378,7 +378,7 @@ class Jaco(base.Task):
                                 'D7':0.1600, 'e2':0.0098}
 
             # DH transform from joint angle to XYZ from kinova robotics ros code
-            self.DH_theta_sign = (1, 1, -1, 1, 1, 1, -1)
+            self.DH_theta_sign = (1, 1, 1, 1, 1, 1, -1)
             self.DH_a = (0, 0, 0, 0, 0, 0, 0)
             self.DH_d = (-self.DH_lengths['D1'], 
                          0, 
@@ -460,7 +460,8 @@ class Jaco(base.Task):
             #if i+1 in self.extreme_joints:
             # x is backwards of reality - this warrants investigation
             extreme_xyz.append([Tall[0,3], Tall[1,3], Tall[2,3]])
-        extremes = np.array(extreme_xyz)[self.extreme_joints-1]
+        #extremes = np.array(extreme_xyz)[self.extreme_joints-1]
+        extremes = np.array(extreme_xyz)
         return extremes
 
     def initialize_episode(self, physics):

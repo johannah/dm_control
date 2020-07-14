@@ -117,7 +117,7 @@ FENCE WARNING  use these for visualization only as they completely alter the rob
 
     <body name="jaco_link_1" pos="0 0 0.15675" quat="0 0 1 0">
        <inertial pos="0 -0.002 -0.0605" mass="0.7477" diaginertia="0.00152032 0.00152032 0.00059816" />
-       <joint name="jaco_joint_1" pos="0 0 0" axis="0 0 1" limited="true" range="-628319 628319" damping="5"/>
+       <joint name="jaco_joint_1" pos="0 0 0" axis="0 0 1" limited="true" range="-628 628" damping="5"/>
        <geom name="jaco_link_1" type="mesh" rgba="0.17 0.17 0.17 1" mesh="shoulder" />
 
      <body name="jaco_link_2"  pos="0 0.0016 -0.11875" quat="0 0 -0.707107 0.707107">
@@ -127,7 +127,7 @@ FENCE WARNING  use these for visualization only as they completely alter the rob
 
       <body name="jaco_link_3" pos="0 -0.205 0" quat="0.707107 -0.707107 0 0">
         <inertial pos="0 0 -0.102245" mass="0.8447" diaginertia="0.00247074 0.00247074 0.000380115" />
-        <joint name="jaco_joint_3" pos="0 0 0" axis="0 0 1" limited="true" range="-628319 628319" damping="20" />
+        <joint name="jaco_joint_3" pos="0 0 0" axis="0 0 1" limited="true" range="-629 628" damping="20" />
         <geom name="jaco_link_3" type="mesh" rgba="0.17 0.17 0.17 1" mesh="arm_half_2" />
 
       <body name="jaco_link_4"  pos="0 0 -0.205" quat="0 0 0.707107 0.707107">
@@ -137,7 +137,7 @@ FENCE WARNING  use these for visualization only as they completely alter the rob
 
       <body name="jaco_link_5"  pos="0 0.2073 -0.0114" quat="0 0 -0.707107 0.707107">
          <inertial pos="0 0.00288489 -0.0541933" mass="0.463" diaginertia="0.000432132 0.000432132 9.26e-05" />
-         <joint name="jaco_joint_5" pos="0 0 0" axis="0 0 1" limited="true" range="-628319 628319" damping="20"/>
+         <joint name="jaco_joint_5" pos="0 0 0" axis="0 0 1" limited="true" range="-628 628" damping="20"/>
          <geom name="jaco_link_5" type="mesh" rgba="0.17 0.17 0.17 1" mesh="wrist_spherical_1" />
 
       <body name="jaco_link_6" pos="0 0 -0.10375" quat="0 0 0.707107 0.707107">
@@ -147,7 +147,7 @@ FENCE WARNING  use these for visualization only as they completely alter the rob
 
       <body name="jaco_link_7" pos="0 0.10375 0" quat="0 0 -0.707107 0.707107">
          <inertial pos="0 0 -0.06" quat="0.5 0.5 -0.5 0.5" mass="0.99" diaginertia="0.0005816 0.000345324 0.000345324" />
-         <joint name="jaco_joint_7" pos="0 0 0" axis="0 0 1" limited="true" range="-628319 628319"  damping="20"/>
+         <joint name="jaco_joint_7" pos="0 0 0" axis="0 0 1" limited="true" range="-628 628"  damping="20"/>
          <geom name="jaco_link_7" type="mesh" rgba="0.73 0.73 0.73 1" mesh="hand_3finger" />
 
       <body name="jaco_link_finger_1" pos="0.00279 0.03126 -0.11467" quat="0.379408 -0.662973 -0.245899 0.596699">
@@ -272,15 +272,15 @@ I think the vel range may be too low - 100 deg per sec on joint 7 is really slow
 
   <actuator>
     <!-- joint 1: needs to be rather strong - at least 1600-->
-    <position joint='jaco_joint_1'    name='pos_act_joint_1' kp="1000" ctrlrange='-628 628' ctrllimited='true'/>
+    <position joint='jaco_joint_1'    name='pos_act_joint_1' kp="1000" ctrlrange='-12.566 12.566' ctrllimited='true'/>
     <!-- joint 2: kp=100 for joint 2 is too low for it to fight gravity -->
     <!-- joint 2: kp=200 for joint 2 seems good -->
     <position joint='jaco_joint_2'  name='pos_act_joint_2' kp="3000"  ctrlrange='.8 5.46' ctrllimited='true'/>
-    <position joint='jaco_joint_3'  name='pos_act_joint_3' kp="2000"  ctrlrange='-628 628' ctrllimited='true'/>
+    <position joint='jaco_joint_3'  name='pos_act_joint_3' kp="2000"  ctrlrange='-12.566 12.566' ctrllimited='true'/>
     <position joint='jaco_joint_4'  name='pos_act_joint_4' kp="3000"  ctrlrange='.5 5.759' ctrllimited='true'/>
-    <position joint='jaco_joint_5'  name='pos_act_joint_5' kp="700"   ctrlrange='-628 628' ctrllimited='true'/>
+    <position joint='jaco_joint_5'  name='pos_act_joint_5' kp="700"   ctrlrange='-12.566 12.566' ctrllimited='true'/>
     <position joint='jaco_joint_6'  name='pos_act_joint_6' kp="700"   ctrlrange='1.1344 5.148' ctrllimited='true'/>
-    <position joint='jaco_joint_7'  name='pos_act_joint_7' kp="700"   ctrlrange='-628 628' ctrllimited='true'/>
+    <position joint='jaco_joint_7'  name='pos_act_joint_7' kp="700"   ctrlrange='-12.566 12.566' ctrllimited='true'/>
     <position joint='jaco_joint_finger_1' name='pos_act_finger_1'          kp="700"  ctrlrange="0 1.51" ctrllimited="true"/>
     <position joint='jaco_joint_finger_tip_1'  name='pos_act_finger_tip_1' kp="700" ctrlrange="0 2" ctrllimited="true"/>
     <position joint='jaco_joint_finger_2' name='pos_act_finger_2'          kp="700"  ctrlrange="0 1.51" ctrllimited="true"/>

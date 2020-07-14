@@ -61,6 +61,46 @@ def get_model_and_assets(xml_name):
     """Returns a tuple containing the model XML string and a dict of assets."""
     return common.read_model(xml_name), common.ASSETS
 
+@SUITE.add('benchmarking', 'position_reacher_7DOF')
+def position_reacher_7DOF(random=None, fence={'x':(-1,1),'y':(-1,1),'z':(0.05,1.2)}, robot_server_ip='127.0.0.1', robot_server_port=9030, physics_type='mujoco', environment_kwargs={}):
+    xml_name='jaco_j2s7s300_position.xml'
+    start_position='home'
+    fully_observable=True 
+    action_penalty=True
+    relative_step=False 
+    relative_rad_max=.1
+    fence=fence 
+    degrees_of_freedom=7 
+    extreme_joints=[4,6,7] 
+    target_size=_BIG_TARGET 
+    target_type='random' 
+    control_timestep=_CONTROL_TIMESTEP
+    episode_timelimit=_LONG_EPISODE_TIME_LIMIT 
+
+    if physics_type == 'robot':
+        physics = RobotPhysics()
+        physics.initialize(robot_server_ip, robot_server_port, fence)
+    else:
+        physics = MujocoPhysics.from_xml_string(*get_model_and_assets(xml_name))
+        physics.initialize(xml_name, random, degrees_of_freedom)
+
+    task = Jaco(random=random, start_position=start_position, 
+             fully_observable=fully_observable, 
+             action_penalty=action_penalty,
+             relative_step=relative_step, 
+             relative_rad_max=relative_rad_max,  
+             fence=fence,
+             degrees_of_freedom=degrees_of_freedom, 
+             extreme_joints=extreme_joints, 
+             target_size=target_size, 
+             target_type=target_type)
+    return control.Environment(
+        physics, task, 
+        control_timestep=control_timestep,
+        time_limit=episode_timelimit, 
+        **environment_kwargs)
+
+
 
 @SUITE.add('benchmarking', 'relative_position_reacher_7DOF')
 def relative_position_reacher_7DOF(random=None, fence={'x':(-1,1),'y':(-1,1),'z':(0.05,1.2)}, robot_server_ip='127.0.0.1', robot_server_port=9030, physics_type='mujoco', environment_kwargs={}):
@@ -317,8 +357,9 @@ class Jaco(base.Task):
         self.use_action_penalty = bool(action_penalty)
         self.extreme_joints = np.array(extreme_joints)
         self.target_size = target_size
-        # finger is ~.06  size
-        self.radii = self.target_size + .1
+        # ~.13 m from tool pose to fingertip
+        # radii = physics.named.model.geom_size[['target', 'finger'], 0].sum()
+        self.radii = self.target_size + .15
         self.start_position = start_position
         self.random_state = np.random.RandomState(random)
         self._fully_observable = fully_observable
@@ -474,11 +515,10 @@ class Jaco(base.Task):
             use_action = relative_action+self.joint_angles[:len(action)]
         else:
             # TODO I think absolute positions should still be limited since actions which are far away cannot be completed
-            relative_action = action-self.joint_angles[:len(action)]
-            use_action = action 
-        if self.use_action_penalty:
-            self.action_penalty = -np.square(relative_action).sum()
+            use_action = np.clip(action, self.joint_angles[:len(action)]-self.relative_rad_max, self.joint_angles[:len(action)]+self.relative_rad_max)
 
+        if self.use_action_penalty:
+            self.action_penalty = -np.square(use_action-self.joint_angles[:len(use_action)]).sum()
         if len(use_action) < physics.n_actuators:
             use_action = np.hstack((use_action, self.closed_hand_position))
         # TODO below only deals with major joints so self.DOF really isn't the right indexer

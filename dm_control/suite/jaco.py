@@ -33,17 +33,8 @@ SUITE = containers.TaggedTasks()
 def DHtransformEL(d,theta,a,alpha):
     T = np.array([[np.cos(theta), -np.sin(theta)*np.cos(alpha), np.sin(theta)*np.sin(alpha),a*np.cos(theta)],
                   [np.sin(theta), np.cos(theta)*np.cos(alpha), -np.cos(theta)*np.sin(alpha),a*np.sin(theta)],
-                  [0, np.sin(alpha), np.cos(alpha),d],
-                  [0,0,0,1]])
-    return T
-
-def DHtransform(d,theta,a,alpha):
-    rotation_matrix = np.array([[np.cos(theta), -np.sin(theta)*np.cos(alpha), np.sin(theta)*np.sin(alpha)],
-                                [np.sin(theta), np.cos(theta)*np.cos(alpha), -np.cos(theta)*np.sin(alpha)],
-                                [0, np.sin(alpha), np.cos(alpha)]])
-    translation = np.array([[a*np.cos(theta)], [a*np.sin(theta)], [d]])
-    last_row = np.array([[0,0,0,1]])
-    T = np.vstack((np.hstack((rotation_matrix, translation)), last_row))
+                  [0.0, np.sin(alpha), np.cos(alpha),d],
+                  [0.0,0.0,0.0,1.0]])
     return T
 
 def trim_and_check_pose_safety(position, fence):
@@ -236,8 +227,8 @@ class MujocoPhysics(mujoco.Physics):
     def set_robot_position_home(self):
         # TODO - should we ensure that the home position is within the fence? 
         #  we should setup walls in the xml sim
-        #self.set_robot_position(self.home_joint_angles)
-        self.set_robot_position(self.out_joint_angles)
+        self.set_robot_position(self.home_joint_angles)
+        #self.set_robot_position(self.out_joint_angles)
 
     def set_robot_position(self, body_angles):
         # fingers are always last in xml - assume joint angles are for major joints to least major
@@ -259,10 +250,10 @@ class MujocoPhysics(mujoco.Physics):
     def get_joint_coordinates(self):
         return self.named.data.geom_xpos.copy()[1:self.n_actuators+1]
 
-    def get_tool_coordinates(self):
-        #TODO - will need to use tool pose rather than finger
-        tool_pose = self.named.data.xpos['jaco_link_finger_1', ['x', 'y', 'z']]
-        return tool_pose
+    #def get_tool_coordinates(self):
+    #    #TODO - will need to use tool pose rather than finger
+    #    tool_pose = self.named.data.xpos['jaco_link_finger_1', ['x', 'y', 'z']]
+    #    return tool_pose
 
     def action_spec(self):
         return mujoco.action_spec(self)
@@ -293,9 +284,9 @@ class RobotPhysics(robot.Physics):
         # only return last joint orientation
         return self.actuator_position
 
-    def get_tool_coordinates(self):
-        #  tool pose is fingertips
-        return self.tool_pose[:3]
+    #def get_tool_coordinates(self):
+    #    #  tool pose is fingertips
+    #    return self.tool_pose[:3]
 
     def set_robot_position_home(self):
         return self.robot_client.home()
@@ -524,7 +515,7 @@ class Jaco(base.Task):
     def after_step(self, physics):
         self.joint_angles = deepcopy(physics.get_joint_angles_radians())
         self.joint_extremes = deepcopy(self._find_joint_coordinate_extremes(self.joint_angles[:7]))
-        self.tool_position = deepcopy(physics.get_tool_coordinates())
+        self.tool_position = self.joint_extremes[-1]
  
     def get_observation(self, physics):
         """Returns either features or only sensors (to be used with pixels)."""

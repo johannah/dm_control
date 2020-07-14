@@ -61,12 +61,13 @@ def get_model_and_assets(xml_name):
     """Returns a tuple containing the model XML string and a dict of assets."""
     return common.read_model(xml_name), common.ASSETS
 
+
 @SUITE.add('benchmarking', 'relative_position_reacher_7DOF')
 def relative_position_reacher_7DOF(random=None, fence={'x':(-1,1),'y':(-1,1),'z':(0.05,1.2)}, robot_server_ip='127.0.0.1', robot_server_port=9030, physics_type='mujoco', environment_kwargs={}):
     xml_name='jaco_j2s7s300_position.xml'
     start_position='home'
     fully_observable=True 
-    action_penalty=False
+    action_penalty=True
     relative_step=True 
     relative_rad_max=.1
     fence=fence 
@@ -171,8 +172,6 @@ class MujocoPhysics(mujoco.Physics):
             joint5: 265.66293335
             joint6: 257.471435547
             joint7: 287.90637207
-
-
             ## approc loc of sleeping home on 7dof jaco2 
             ---
             joint1: 269.791229248
@@ -250,11 +249,6 @@ class MujocoPhysics(mujoco.Physics):
     def get_joint_coordinates(self):
         return self.named.data.geom_xpos.copy()[1:self.n_actuators+1]
 
-    #def get_tool_coordinates(self):
-    #    #TODO - will need to use tool pose rather than finger
-    #    tool_pose = self.named.data.xpos['jaco_link_finger_1', ['x', 'y', 'z']]
-    #    return tool_pose
-
     def action_spec(self):
         return mujoco.action_spec(self)
 
@@ -283,10 +277,6 @@ class RobotPhysics(robot.Physics):
     def get_joint_angles_radians(self):
         # only return last joint orientation
         return self.actuator_position
-
-    #def get_tool_coordinates(self):
-    #    #  tool pose is fingertips
-    #    return self.tool_pose[:3]
 
     def set_robot_position_home(self):
         return self.robot_client.home()
@@ -411,7 +401,7 @@ class Jaco(base.Task):
     def _find_joint_coordinate_extremes(self, major_joint_angles):  
         """calculate xyz positions for joints form cartesian extremes
         major_joint_angles: ordered list of joint angles in radians (len 7 for 7DOF arm)"""
-        """ July 11 2020 - 
+        """ July 2020 - 
         JRH sanity checked these values by setting the real 7DOF Jaco 2 robot to the "home position" 
         and measured the physical robot against the DH calculations of extreme joints.
         In this function, we care about the elbow (joint 4), wrist, (joint6) and tool pose (fingertips)
@@ -423,15 +413,7 @@ class Jaco(base.Task):
                                       4.6366,  # 265.66
                                       4.493,   # 257.47
                                       5.0249,  # 287.9
-        The result of _find_joint_coordinate_extremes([4.92,2.839,0.,.758,4.6366,4.493,5.0249]) is the following (in meters):
-        array([[-0.   ,  0.   ,  0.276],
-                 [-0.   ,  0.   ,  0.276],
-                 [ 0.025,  0.12 ,  0.667],
-                 [ 0.016,  0.122,  0.667],
-                 [-0.04 , -0.144,  0.515],
-                 [-0.04 , -0.144,  0.515],
-                 [-0.304, -0.149,  0.504]]
-         
+        
         Unfortunately, I only have an Imperial tape measure, so converting to inches first:
         ---
         index   xm         ym       zm      xin       yin       zin        measured_description
@@ -449,9 +431,7 @@ class Jaco(base.Task):
             T = DHtransformEL(self.DH_d[i], DH_theta, self.DH_a[i], self.DH_alpha[i])
             Tall = np.dot(Tall, T)
             #if i+1 in self.extreme_joints:
-            # x is backwards of reality - this warrants investigation
             extreme_xyz.append([Tall[0,3], Tall[1,3], Tall[2,3]])
-        #extremes = np.array(extreme_xyz)[self.extreme_joints-1]
         extremes = np.array(extreme_xyz)
         return extremes
 
@@ -485,31 +465,30 @@ class Jaco(base.Task):
         take in relative or absolute np.array of actions of length self.DOF
         if relative mode, action will be relative to the current state
         """
+
         self.hit_penalty = 0.0
-        use_action = action 
         # need action to be same shape as number of actuators
         if self.relative_step:
+            # relative action prone to drift over time
             relative_action = np.clip(action, -self.relative_rad_max, self.relative_rad_max)
-            #print('relative action', use_action)
-            if self.use_action_penalty:
-                self.action_penalty = -np.square(relative_action).sum()
-            use_action = relative_action+self.joint_angles[:len(use_action)]
+            use_action = relative_action+self.joint_angles[:len(action)]
         else:
-            if self.use_action_penalty:
-                raise NotImplemented; print("action penalty with abs step not implemented")
+            # TODO I think absolute positions should still be limited since actions which are far away cannot be completed
+            relative_action = action-self.joint_angles[:len(action)]
+            use_action = action 
+        if self.use_action_penalty:
+            self.action_penalty = -np.square(relative_action).sum()
 
         if len(use_action) < physics.n_actuators:
             use_action = np.hstack((use_action, self.closed_hand_position))
-        self.safe_step = True
         # TODO below only deals with major joints so self.DOF really isn't the right indexer
-        joint_extremes = self._find_joint_coordinate_extremes(use_action[:7])
+        joint_extremes = self._find_joint_coordinate_extremes(use_action[:7])[self.extreme_joints-1]
         for xx,joint_xyz in enumerate(joint_extremes):
             good_xyz, hit = trim_and_check_pose_safety(joint_xyz, self.fence)
             if hit:
                 self.hit_penalty -= 1.0
                 self.safe_step = False
                 #print('joint {} will hit at ({},{},{}) at requested joint position - blocking action'.format(self.extreme_joints[xx], *good_xyz))
-
         super(Jaco, self).before_step(use_action, physics)
 
     def after_step(self, physics):
@@ -523,18 +502,17 @@ class Jaco(base.Task):
         # TODO is timestep needed?? may be important for Torque controlled on real robot
         obs = collections.OrderedDict()
         #obs['timestep'] = physics.get_timestep()
-        #print('observation', self.joint_angles)
         obs['to_target'] = self.target_position-self.tool_position
         obs['joint_angles'] = self.joint_angles
         obs['joint_forces'] = physics.get_actuator_force()
         obs['joint_velocity'] = physics.get_actuator_velocity()
-        obs['joint_extremes'] = self.joint_extremes
-        # DEBUG vars
-        obs['tool_position'] = self.tool_position
-        obs['jaco_link_4'] = physics.named.data.xpos['jaco_link_4']
-        obs['jaco_link_6'] = physics.named.data.xpos['jaco_link_6']
-        obs['jaco_link_finger_tip_1'] = physics.named.data.xpos['jaco_link_finger_tip_1']
-        obs['target_position'] = self.target_position
+        ## DEBUG vars
+        #obs['joint_extremes'] = self.joint_extremes
+        #obs['tool_position'] = self.tool_position
+        #obs['jaco_link_4'] = physics.named.data.xpos['jaco_link_4']
+        #obs['jaco_link_6'] = physics.named.data.xpos['jaco_link_6']
+        #obs['jaco_link_finger_tip_1'] = physics.named.data.xpos['jaco_link_finger_tip_1']
+        #obs['target_position'] = self.target_position
         return obs
 
     def get_distance(self, position_1, position_2):

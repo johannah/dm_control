@@ -1,4 +1,4 @@
-"""Jaco arm test"""
+
 
 from __future__ import absolute_import
 from __future__ import division
@@ -32,9 +32,9 @@ SUITE = containers.TaggedTasks()
 
 def DHtransformEL(d,theta,a,alpha):
     T = np.array([[np.cos(theta), -np.sin(theta)*np.cos(alpha), np.sin(theta)*np.sin(alpha),a*np.cos(theta)],
-                                [np.sin(theta), np.cos(theta)*np.cos(alpha), -np.cos(theta)*np.sin(alpha),a*np.sin(theta)],
-                                [0, np.sin(alpha), np.cos(alpha),d],
-                                [0,0,0,1]])
+                  [np.sin(theta), np.cos(theta)*np.cos(alpha), -np.cos(theta)*np.sin(alpha),a*np.sin(theta)],
+                  [0, np.sin(alpha), np.cos(alpha),d],
+                  [0,0,0,1]])
     return T
 
 def DHtransform(d,theta,a,alpha):
@@ -378,7 +378,6 @@ class Jaco(base.Task):
                                 'D7':0.1600, 'e2':0.0098}
 
             # DH transform from joint angle to XYZ from kinova robotics ros code
-            self.DH_theta_sign = (1, 1, 1, 1, 1, 1, -1)
             self.DH_a = (0, 0, 0, 0, 0, 0, 0)
             self.DH_d = (-self.DH_lengths['D1'], 
                          0, 
@@ -387,10 +386,10 @@ class Jaco(base.Task):
                          -(self.DH_lengths['D4'] + self.DH_lengths['D5']), 
                          0, 
                          -(self.DH_lengths['D6']+self.DH_lengths['D7']))
+ 
             self.DH_alpha = (np.pi/2.0, np.pi/2.0, np.pi/2.0, np.pi/2.0, np.pi/2.0, np.pi/2.0, np.pi)
-            #self.DH_theta_offset = (0, 0, 0, 0, 0, 0, 0)
-            #self.DH_theta_offset = (0.0, 0., 0., 0., 0., 0.0, np.pi/2.0)
-            self.DH_theta_offset = (np.pi, 0., 0., 0., 0., 0.0, np.pi/2.0)
+            self.DH_theta_sign = (1, 1, 1, 1, 1, 1, 1)
+            self.DH_theta_offset = (np.pi,0.0, 0.0, 0.0, 0.0,0.0,np.pi/2.0)
 
         super(Jaco, self).__init__()
 
@@ -452,7 +451,8 @@ class Jaco(base.Task):
         extreme_xyz = []
 
         # for 7DOF robot only!
-        Tall = DHtransformEL(d=0.0,theta=0.0,a=0.0,alpha=np.pi)
+        # transform first!
+        Tall = np.array([[1,0,0,0],[0,-1,0,0],[0,0,-1,0],[0,0,0,1]], dtype=np.float)
         for i, angle in enumerate(major_joint_angles):
             DH_theta = self.DH_theta_sign[i]*angle + self.DH_theta_offset[i]
             T = DHtransformEL(self.DH_d[i], DH_theta, self.DH_a[i], self.DH_alpha[i])

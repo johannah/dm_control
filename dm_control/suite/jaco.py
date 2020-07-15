@@ -75,7 +75,7 @@ def position_reacher_7DOF(random=None, fence={'x':(-1,1),'y':(-1,1),'z':(0.05,1.
     target_size=_BIG_TARGET 
     target_type='random' 
     control_timestep=_CONTROL_TIMESTEP
-    episode_timelimit=_LONG_EPISODE_TIME_LIMIT 
+    episode_timelimit=_SHORT_EPISODE_TIME_LIMIT 
 
     if physics_type == 'robot':
         physics = RobotPhysics()
@@ -116,7 +116,7 @@ def relative_position_reacher_7DOF(random=None, fence={'x':(-1,1),'y':(-1,1),'z'
     target_size=_BIG_TARGET 
     target_type='random' 
     control_timestep=_CONTROL_TIMESTEP
-    episode_timelimit=_LONG_EPISODE_TIME_LIMIT 
+    episode_timelimit=_SHORT_EPISODE_TIME_LIMIT 
 
     if physics_type == 'robot':
         physics = RobotPhysics()

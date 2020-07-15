@@ -25,9 +25,52 @@ from dm_control.utils import io as resources
 _SUITE_DIR = os.path.dirname(os.path.dirname(__file__))
 _FILENAMES = [
     "./common/materials.xml",
-    "./common/skybox.xml",
     "./common/visual.xml",
-]
+    "./common/skybox.xml",
+    "./common/texture_config.xml",
+    #  below files are directly from jaco approximation
+    #"./common/meshes/finger_distal_limb_1.stl",
+    #"./common/meshes/finger_distal_limb_2.stl",
+    #"./common/meshes/finger_proximal_limb_1.stl",
+    #"./common/meshes/finger_proximal_limb_2.stl",
+    #"./common/meshes/jaco_link_1.stl",
+    #"./common/meshes/jaco_link_2.stl",
+    #"./common/meshes/jaco_link_3.stl",
+    #"./common/meshes/jaco_link_4.stl",
+    #"./common/meshes/jaco_link_5.stl",
+    #"./common/meshes/jaco_link_base.stl",
+    #"./common/meshes/jaco_link_finger_1.stl",
+    #"./common/meshes/jaco_link_finger_2.stl",
+    #"./common/meshes/jaco_link_finger_3.stl",
+    #"./common/meshes/jaco_link_hand.stl",
+    #  below files are directly from kinova
+    "./common/kinova_meshes/base.stl",
+    "./common/kinova_meshes/shoulder.stl",
+    "./common/kinova_meshes/arm.stl",
+    "./common/kinova_meshes/arm_half_1.stl",
+    "./common/kinova_meshes/arm_half_2.stl",
+    "./common/kinova_meshes/forearm.stl",
+    "./common/kinova_meshes/ring_big.stl",
+    "./common/kinova_meshes/ring_small.stl",
+    "./common/kinova_meshes/wrist_spherical_1.stl",
+    "./common/kinova_meshes/wrist_spherical_2.stl",
+    "./common/kinova_meshes/hand_3finger.stl",
+    "./common/kinova_meshes/finger_proximal.stl",
+    "./common/kinova_meshes/finger_distal.stl",
+    # textures
+    "./common/textures/darkwood.png",
+    "./common/textures/granite.png",
+    "./common/textures/light_wood.png",
+    "./common/textures/light_wood_v2.png",
+    "./common/textures/light_wood_v3.png",
+    "./common/textures/marble.png",
+    "./common/textures/metal.png",
+    "./common/textures/navy_blue.png",
+    "./common/textures/real_door.png",
+    "./common/textures/tennis.png",
+    "./common/textures/wood_light.png",
+    "./common/textures/wood.png",
+   ]
 
 ASSETS = {filename: resources.GetResource(os.path.join(_SUITE_DIR, filename))
           for filename in _FILENAMES}

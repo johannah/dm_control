@@ -386,7 +386,8 @@ class RobotPhysics(robot.Physics):
 
     def set_joint_angles(self, body_angles):
         # only send relative rad angles from here
-        self.step(body_angles)
+        self.set_control(body_angles)
+        self.step()
 
     def get_timestep(self):
         return self.timestep()
@@ -428,6 +429,7 @@ class Jaco(base.Task):
           random: Optional,  an integer seed for creating a new `RandomState`, or None to select a seed
             automatically (default).
         """
+        self.safe_step = False
         self.safety_physics = safety_physics
         self.target_type = target_type
         self.fixed_target_position = self.target_position = np.array(fixed_target_position)
@@ -528,12 +530,12 @@ class Jaco(base.Task):
             raise NotImplementedError
         return angles
 
-    def check_joint_angle_self_collisions(self, joint_angles):
+    def check_for_self_collisions(self, joint_angles):
         # Check for collisions. This doesnt work!
         self.safety_physics.set_joint_angles(joint_angles)
         self.safety_physics.after_reset()
         penetrating = self.safety_physics.data.ncon > 0
-        return not penetrating
+        return penetrating
         #print('penetrating', penetrating) 
         #if penetrating:
             # TODO we only care if target / table are hitting
@@ -564,15 +566,19 @@ class Jaco(base.Task):
         trys = 0
         while not safe and trys < max_trys:
             random_angles = self.random_state.uniform(min_bounds, max_bounds, len(min_bounds))
-            joint_extremes = _find_joint_coordinate_extremes(random_angles[:self.safety_physics.n_major_actuators])
             trys+=1
-            if self.within_safety_fence(joint_extremes):
-                if self.check_joint_angle_self_collisions(random_angles):
-                    return random_angles
+            if self.is_safe_position(random_angles):
+                return random_angles
         print('unable to find safe random joints after {} trys'.format(trys))
         return self.home_joint_angles
-            
 
+    def is_safe_position(self, angles):
+        joint_extremes = _find_joint_coordinate_extremes(angles[:self.safety_physics.n_major_actuators])
+        if self.within_safety_fence(joint_extremes):
+            if not self.check_for_self_collisions(angles):
+                 return True
+        return False
+            
     def make_target(self, target_type='random', max_distance=1.1):
         assert target_type in ['random', 'fixed']
         if target_type == 'random':
@@ -612,6 +618,7 @@ class Jaco(base.Task):
         take in relative or absolute np.array of actions of length self.DOF
         if relative mode, action will be relative to the current state
         """
+        self.safe_step = True
         self.hit_penalty = 0.0
         # need action to be same shape as number of actuators
         if self.relative_step:
@@ -629,6 +636,10 @@ class Jaco(base.Task):
             if hit:
                 #print('{} DH:{} {} will hit at {} at requested joint position - blocking action'.format(physics.type, xx, joint_extremes[xx], good_xyz))
                 self.hit_penalty -= 1.0
+                self.safe_step = False
+        if self.check_for_self_collisions(use_action):
+            self.hit_penalty -= 100.0
+            self.safe_step = False
         super(Jaco, self).before_step(use_action, physics)
 
     def after_step(self, physics):

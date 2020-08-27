@@ -179,6 +179,50 @@ def relative_position_reacher_7DOF(random=None, fence={'x':(-1,1),'y':(-1,1),'z'
             **environment_kwargs)
     return env
 
+@SUITE.add('benchmarking', 'fixed_relative_position_reacher_7DOF')
+def fixed_relative_position_reacher_7DOF(random=None, fence={'x':(-1,1),'y':(-1,1),'z':(0.05,1.2)}, target_type='fixed', fixed_target_position=[.2,-.2,.5], robot_server_ip='127.0.0.1', robot_server_port=9030, physics_type='mujoco', environment_kwargs={}):
+    xml_name='jaco_j2s7s300_position.xml'
+    robot_name = 'j2s7s300'
+    start_position='home'
+    fully_observable=True 
+    action_penalty=True
+    relative_step=True 
+    relative_rad_max=.1
+    fence=fence 
+    degrees_of_freedom=7 
+    extreme_joints=[4,6,7] 
+    target_size=_BIG_TARGET 
+    episode_timelimit=_POSITION_EPISODE_TIME_LIMIT 
+    if physics_type == 'robot':
+        physics = RobotPhysics()
+        physics.initialize(robot_name, robot_server_ip, robot_server_port, fence)
+    else:
+        physics = MujocoPhysics.from_xml_string(*get_model_and_assets(xml_name))
+        physics.initialize(robot_name, random, degrees_of_freedom, fence)
+
+    safety_physics = MujocoPhysics.from_xml_string(*get_model_and_assets(xml_name))
+    safety_physics.initialize(robot_name, random, degrees_of_freedom, fence)
+    task = Jaco(safety_physics=safety_physics, random=random, start_position=start_position, 
+             fully_observable=fully_observable, 
+             action_penalty=action_penalty,
+             relative_step=relative_step, 
+             relative_rad_max=relative_rad_max,  
+             fence=fence,
+             degrees_of_freedom=degrees_of_freedom, 
+             extreme_joints=extreme_joints, 
+             target_size=target_size, 
+             target_type=target_type, 
+             fixed_target_position=fixed_target_position, 
+             )
+    env = control.Environment(
+            physics, task, 
+            n_sub_steps=1,
+            time_limit=episode_timelimit, 
+            **environment_kwargs)
+    return env
+
+
+
 @SUITE.add('benchmarking', 'configurable_reacher')
 def configurable_reacher(xml_name='jaco_j2s7s300_position.xml', 
                          random=None, 
@@ -638,7 +682,7 @@ class Jaco(base.Task):
                 self.hit_penalty -= 1.0
                 self.safe_step = False
         if self.check_for_self_collisions(use_action):
-            self.hit_penalty -= 100.0
+            self.hit_penalty -= 10.0
             self.safe_step = False
         super(Jaco, self).before_step(use_action, physics)
 

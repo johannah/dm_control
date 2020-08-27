@@ -88,15 +88,22 @@ class RobotClient():
     joint_velocity = json.loads(vals[6])
     joint_effort = json.loads(vals[7])
     tool_pose = json.loads(vals[8])
+    image_enc = vals[9]
+    image_height = int(vals[10])
+    image_width = int(vals[11])
+    image_data = vals[12]
+    image_dict = {'enc':image_enc, 
+                     'height':image_height, 
+                     'width':image_width, 
+                     'data':image_data}
     #print('returning from decode state')
-    return timediff, joint_position, joint_velocity, joint_effort, tool_pose
+    return timediff, joint_position, joint_velocity, joint_effort, tool_pose, image_dict
 
   def send(self, cmd, msg='XX'):
     packet = self.startseq+cmd+self.midseq+msg+self.endseq
     self.tcp_socket.sendall(packet.encode())
     # TODO - should prob handle larger packets
-    rx = self.tcp_socket.recv(2048).decode()
-    #print("rx", rx)
+    rx = self.tcp_socket.recv(2048+921600).decode()
     return rx
 
   def home(self):
@@ -172,6 +179,7 @@ class Physics(_control.Physics):
                 min(self.fence['x']), max(self.fence['x']),
                 min(self.fence['y']), max(self.fence['y']),
                 min(self.fence['z']), max(self.fence['z']))
+    self.image_dict = {'enc':'none', 'width':0, 'height':0, 'data':'none'}
     self.handle_state(resp)
     print('finished initialize on dm_control')
 
@@ -182,7 +190,6 @@ class Physics(_control.Physics):
       control: NumPy array or array-like actuation values.
     """
     self.data = control[:self.n_major_actuators]
-    print('setting control', control, self.data)
 
   def step(self):
     """Advances physics with up-to-date position and velocity dependent fields.
@@ -190,7 +197,7 @@ class Physics(_control.Physics):
     # TODO - only step once for real robot
     self.handle_state(self.robot_client.step(command_type='ANGLE', relative=False, unit='rad', data=self.data))
 
-  def render(self, height=240, width=320, camera_id=-1, overlays=(), 
+  def render(self, height=640, width=480, camera_id=-1, overlays=(), 
          depth=False, segmentation=False, scene_option=None):
     """
     Args:
@@ -215,6 +222,8 @@ class Physics(_control.Physics):
     Returns:
       The rendered RGB, depth or segmentation image.
     """
+    img = self.image_dict['data']
+    embed()
     return np.zeros((height,width,3))
 
   def get_state(self):
@@ -237,13 +246,14 @@ class Physics(_control.Physics):
     return [self.actuator_position, self.actuator_velocity, self.actuator_effort]
 
   def handle_state(self, state_tuple):
-    timediff, joint_position, joint_velocity, joint_effort, tool_pose = state_tuple
+    timediff, joint_position, joint_velocity, joint_effort, tool_pose, image_dict = state_tuple
     #print("HANDLE", joint_position)
     self.timediff = timediff
     self.actuator_position = np.array(joint_position)
     self.actuator_velocity = np.array(joint_velocity)
     self.actuator_effort = np.array(joint_effort)
     self.tool_pose = np.array(tool_pose)
+    self.image_dict = image_dict
 
 #  def set_state(self, physics_state):
 #    """Sets the physics state.

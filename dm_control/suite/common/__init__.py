@@ -40,8 +40,6 @@ _FILENAMES = [
     "./common/kinova_meshes/wrist_spherical_1.stl",
     "./common/kinova_meshes/wrist_spherical_2.stl",
     "./common/kinova_meshes/hand_3finger.stl",
-    "./common/kinova_meshes/hand_3finger_main.stl",
-    "./common/kinova_meshes/hand_3finger_insert.stl",
     "./common/kinova_meshes/finger_proximal.stl",
     "./common/kinova_meshes/finger_distal.stl",
     # textures

@@ -24,8 +24,6 @@
     <mesh name="wrist_spherical_1" file="wrist_spherical_1.stl" />
     <mesh name="wrist_spherical_2" file="wrist_spherical_2.stl" />
     <mesh name="hand_3finger" file="hand_3finger.stl" />
-    <mesh name="hand_3finger_main" file="hand_3finger_main.stl" />
-    <mesh name="hand_3finger_insert" file="hand_3finger_insert.stl" />
     <mesh name="finger_proximal" file="finger_proximal.stl" />
     <mesh name="finger_distal" file="finger_distal.stl" />
 </asset>

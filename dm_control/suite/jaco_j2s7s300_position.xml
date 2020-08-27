@@ -1,65 +1,81 @@
 <mujoco model="jaco position actuated 7dof arm">
-	<! the j2s7s300 publishes its joint state at about 52 Hz wo optimization. Mujoco was unstable when timestep was gt .001. If we set gravity to -9.81 in the z dim, we aren't able to treat the controllers the same as we do the real robot (0 velocity results in no movement). " -->
+	<!-- the j2s7s300 publishes its joint state at about 52 Hz wo optimization. Mujoco was unstable when timestep was gt .001. If we set gravity to -9.81 in the z dim, we aren't able to treat the controllers the same as we do the real robot (0 velocity results in no movement). " -->
+<!--
   <size njmax="800" nconmax="200" />
     <compiler angle="radian" meshdir="./common/kinova_meshes/" discardvisual='true' coordinate='local'/>
-    <!-- <option integrator="RK4" solver="PGS" timestep="0.001" gravity="0 0 -9.8" iterations="50"/>-->
   <option integrator="RK4" solver="PGS" timestep="0.001" gravity="0 0 -9.8" iterations="50"/>
+-->
+ <!-- <option integrator="RK4" solver="PGS" timestep="0.001" gravity="0 0 -9.8" iterations="50"/>-->
+<option timestep="0.02"/>
+<size njmax="800" nconmax="200" />
+<compiler angle="radian" meshdir="./common/kinova_meshes/"/>
+<include file="./common/skybox.xml"/>
+<include file="./common/visual.xml"/>
+<include file="./common/materials.xml"/>
+<!--
+<include file="./common/texture_config.xml"/>
+-->
+<asset>
+    <mesh name="base" file="base.stl" />
+    <mesh name="shoulder" file="shoulder.stl" />
+    <mesh name="arm_half_1" file="arm_half_1.stl" />
+    <mesh name="arm_half_2" file="arm_half_2.stl" />
+    <mesh name="forearm" file="forearm.stl" />
+    <mesh name="wrist_spherical_1" file="wrist_spherical_1.stl" />
+    <mesh name="wrist_spherical_2" file="wrist_spherical_2.stl" />
+    <mesh name="hand_3finger" file="hand_3finger.stl" />
+    <mesh name="hand_3finger_main" file="hand_3finger_main.stl" />
+    <mesh name="hand_3finger_insert" file="hand_3finger_insert.stl" />
+    <mesh name="finger_proximal" file="finger_proximal.stl" />
+    <mesh name="finger_distal" file="finger_distal.stl" />
+</asset>
 
-  <include file="./common/skybox.xml"/>
-  <include file="./common/visual.xml"/>
-  <include file="./common/materials.xml"/>
-  <include file="./common/texture_config.xml"/>
-  <asset>
-
-        <mesh name="base" file="base.stl" />
-        <mesh name="shoulder" file="shoulder.stl" />
-        <mesh name="arm_half_1" file="arm_half_1.stl" />
-        <mesh name="arm_half_2" file="arm_half_2.stl" />
-        <mesh name="forearm" file="forearm.stl" />
-        <mesh name="wrist_spherical_1" file="wrist_spherical_1.stl" />
-        <mesh name="wrist_spherical_2" file="wrist_spherical_2.stl" />
-        <mesh name="hand_3finger" file="hand_3finger.stl" />
-        <mesh name="finger_proximal" file="finger_proximal.stl" />
-        <mesh name="finger_distal" file="finger_distal.stl" />
-
-        <texture name="groundplane" type="2d" builtin="checker" rgb1=".25 .26 .25"
-      rgb2=".22 .22 .22" width="100" height="100" mark="none" markrgb=".8 .8 .8"/>
-
-    </asset>
-
- <default>
-    <geom contype='1' conaffinity='1' condim='3' margin="0.001" />
-
-    <!-- damping>5 keeps joints from shaking with position controllers! -->
-    <joint limited="false" damping="5" armature=".01"/>
-
-    <default class ="vizNcoll">
-      <geom material="MatViz" type="mesh" condim="3" contype="1" conaffinity="1" margin="0.001"/>
-      <joint pos="0 0 0" type="hinge"/>
+<default>
+    <geom type="mesh" material="dark_gray" condim="3" contype="3" conaffinity="2"/>
+    <joint pos="0 0 0" type="hinge" damping="0.01"/>
+    <default class="large_joint">
+      <joint armature="4" frictionloss="2" damping="15"/>
     </default>
-    <default class ="ground">
-      <geom type="plane" margin="0.001" contype="1" />
+    
+    <default class="small_joint">
+      <joint armature="2" frictionloss="2" damping="10"/>
     </default>
-  </default>
+    
+    <default class="ring">
+        <geom type="cylinder" material="light_gray" mass="0"/>
+        <default class="large_ring">
+            <geom size="0.044 0.011"/>
+        </default>
+        <default class="small_ring">
+            <geom size="0.035 0.009"/>
+        </default>
+    </default>
+    <default class="finger">
+      <joint armature="1" frictionloss="2" damping="5"/>
+      <geom type="mesh" material="light_gray" condim="4"/>
+      <default class="finger_proximal">
+        <geom mesh="finger_proximal" mass="0.0255204"/>
+      </default>
+      <default class="finger_distal">
+        <geom mesh="finger_distal" mass="0.0132655"/>
+      </default>
+    </default>
+ 
+</default>
 
-
- <worldbody>
+<worldbody>
     <light cutoff="200" diffuse="1.2 1.2 1.2" dir="-0 0 -1.3" directional="true" exponent="1" pos="0 0 1.3" specular=".1 .1 .1"/>
 
-    <!-- <camera name="topview" pos="0 0 2" zaxis="0 0 1" fovy="45" ipd="0.068"/> -->
     <camera name="topview" pos="-.2 -.2 1.4" quat="1 0 0 0" fovy="70"/>
-    <!-- <camera name="negquadview" pos="-1 -1 .4" quat="0 0 1 0" fovy="70"/> -->
-    <camera name="lookat4" mode="targetbodycom" target="jaco_link_4" pos="-1 -1 .5"/>
-
-    <!-- constrain on by placing fences in plane size is the "radius" of the rectangle (.5 h or w)--> 
+    <camera name="negquadview" pos="-1 -1 .4" quat="0 0 1 0" fovy="70"/> 
+    <camera name="lookat4" mode="targetbodycom" target="b_4" pos="-1 -1 .5"/>
     <!-- wall_y is facing the side where the power cables come into the robot -->
-    <!--
--->
 <!--
     <geom name="table" type="plane" pos="-.3 -.15 0" zaxis="0 0 1" size=".91 .3 .1" material="light_wood_v2"/>
 -->
-<!-- set target to contype=0 conaffinity=0 condim=1 for frictionless / no contact -->
-    <geom name="target" pos="1 1 1" material="target" type="sphere" size=".05" friction="1" condim="1" contype="1" conaffinity="0"/>
+    <!-- set target to condim=1 for frictionless contact -->
+    <!-- <geom name="target" pos="1 1 1" material="target" type="sphere" size=".15" friction="1" condim="1" contype="1" conaffinity="0"/>-->
+    <geom name="target" pos=".7 .7 .7" material="target" type="sphere" size=".15"/>
 
     <!-- plot coordinate system xyz-rgb-->
     <!--
@@ -68,246 +84,137 @@
     <geom name="coord_z" type="capsule" fromto="1 1 1 1 1 1.4"  size=".002" condim=1 friction=0 rgba="0 0 1 1" mass="0"/>
      -->
 
-   <! 
-Visualize safety fence: 
-FENCE WARNING  use these for visualization only as they completely alter the robot physics so should not be left in during simulation-->
-
-<!--
-   <geom name="low_fence_pos_x" type="capsule" fromto=".5 .4 .12 .5 -1 .12"  size=".02" condim=1 friction=0 rgba="0 1 0 1" mass="0"/>
-    <geom name="low_fence_neg_x" type="capsule" fromto="-.5 .4 .12 -.5 -1 .12"  size=".02" condim=1 friction=0 rgba="0 1 0 1" mass="0"/>
-
-    <geom name="low_fence_pos_y" type="capsule" fromto="-.5 .4 .12 .5 .4 .12"  size=".02" condim=1 friction=0 rgba="1 0 0 1" mass="0"/>
-    <geom name="low_fence_neg_y" type="capsule" fromto="-.5 -1 .12 .5 -1 .12"  size=".02" condim=1 friction=0 rgba="1 0 0 1" mass="0"/>
--->
-
-   <! x grid lines -->
-   <!--
-   <geom name="x0" type="capsule" fromto="0 .4 .02 0 -1 .02"        size=".01" condim=1 friction=0 rgba="1 1 1 1" mass="0"/>
-   <geom name="x1" type="capsule" fromto="0.1 .4 .02 0.1 -1 .02"    size=".01" condim=1 friction=0 rgba="0 1 0 1" mass="0"/>
-   <geom name="x2" type="capsule" fromto="0.2 .4 .02 0.2 -1 .02"    size=".01" condim=1 friction=0 rgba="0 1 0 1" mass="0"/>
-   <geom name="x3" type="capsule" fromto="0.3 .4 .02 0.3 -1 .02"    size=".01" condim=1 friction=0 rgba="0 1 0 1" mass="0"/>
-   <geom name="x4" type="capsule" fromto="0.4 .4 .02 0.4 -1 .02"    size=".01" condim=1 friction=0 rgba="0 1 0 1" mass="0"/>
-   <geom name="xn1" type="capsule" fromto="-.1 .4 .02 -0.1 -1 .02"  size=".01" condim=1 friction=0 rgba="0 1 0 1" mass="0"/>
-   <geom name="xn2" type="capsule" fromto="-.2 .4 .02 -0.2 -1 .02"  size=".01" condim=1 friction=0 rgba="0 1 0 1" mass="0"/>
-   <geom name="xn3" type="capsule" fromto="-.3 .4 .02 -0.3 -1 .02"  size=".01" condim=1 friction=0 rgba="0 1 0 1" mass="0"/>
-   <geom name="xn4" type="capsule" fromto="-.4 .4 .02 -0.4 -1 .02"  size=".01" condim=1 friction=0 rgba="0 1 0 1" mass="0"/>
--->
-
-
-   <! y grid lines -->
-   <!--
-    <geom name="y0" type="capsule" fromto="-.5 0 0.2 .5 0 0.2"       size=".01" condim=1 friction=0 rgba="1 1 1 1" mass="0"/>
-    <geom name="y1" type="capsule" fromto="-.5 0.1 0.2 .5 0.1 0.2"   size=".01" condim=1 friction=0 rgba="1 0 0 1" mass="0"/>
-    <geom name="y2" type="capsule" fromto="-.5 0.2 0.2 .5 0.2 0.2"   size=".01" condim=1 friction=0 rgba="1 0 0 1" mass="0"/>
-    <geom name="y3" type="capsule" fromto="-.5 0.3 0.2 .5 0.3 0.2"   size=".01" condim=1 friction=0 rgba="1 0 0 1" mass="0"/>
-    <geom name="yn1" type="capsule" fromto="-.5 -.1 0.2 .5 -.1 0.2"  size=".01" condim=1 friction=0 rgba="1 0 0 1" mass="0"/>
-    <geom name="yn2" type="capsule" fromto="-.5 -.2 0.2 .5 -.2 0.2"  size=".01" condim=1 friction=0 rgba="1 0 0 1" mass="0"/>
-    <geom name="yn3" type="capsule" fromto="-.5 -.3 0.2 .5 -.3 0.2"  size=".01" condim=1 friction=0 rgba="1 0 0 1" mass="0"/>
-    <geom name="yn4" type="capsule" fromto="-.5 -.4 0.2 .5 -.4 0.2"  size=".01" condim=1 friction=0 rgba="1 0 0 1" mass="0"/>
-    <geom name="yn5" type="capsule" fromto="-.5 -.5 0.2 .5 -.5 0.2"  size=".01" condim=1 friction=0 rgba="1 0 0 1" mass="0"/>
-    <geom name="yn6" type="capsule" fromto="-.5 -.6 0.2 .5 -.6 0.2"  size=".01" condim=1 friction=0 rgba="1 0 0 1" mass="0"/>
-    <geom name="yn7" type="capsule" fromto="-.5 -.7 0.2 .5 -.7 0.2"  size=".01" condim=1 friction=0 rgba="1 0 0 1" mass="0"/>
-    <geom name="yn8" type="capsule" fromto="-.5 -.8 0.2 .5 -.8 0.2"  size=".01" condim=1 friction=0 rgba="1 0 0 1" mass="0"/>
-    <geom name="yn9" type="capsule" fromto="-.5 -.9 0.2 .5 -.9 0.2"  size=".01" condim=1 friction=0 rgba="1 0 0 1" mass="0"/>
--->
-
-    <!-- robot -->
-
+<!-- robot -->
+ <body name="b_base">
     <geom name='base' type="mesh" pos="0 0 0" euler="0 0 6.2831" rgba="0.17 0.17 0.17 1" mesh="base" />
-
-    <body name="jaco_link_1" pos="0 0 0.15675" quat="0 0 1 0">
+    <body name="b_1" pos="0 0 0.15675" quat="0 0 1 0">
        <inertial pos="0 -0.002 -0.0605" mass="0.7477" diaginertia="0.00152032 0.00152032 0.00059816" />
-       <joint name="jaco_joint_1" pos="0 0 0" axis="0 0 1" limited="true" range="-628 628" damping="5"/>
+       <joint name="jaco_joint_1" pos="0 0 0" axis="0 0 1" class="large_joint"/>
        <geom name="jaco_link_1" type="mesh" rgba="0.17 0.17 0.17 1" mesh="shoulder" />
+         <geom name="ring_1" class="large_ring" mass="1e-9"/>
 
-     <body name="jaco_link_2"  pos="0 0.0016 -0.11875" quat="0 0 -0.707107 0.707107">
+     <body name="b_2"  pos="0 0.0016 -0.11875" quat="0 0 -0.707107 0.707107">
        <inertial pos="0 -0.103563 0" quat="0.707107 0.707107 0 0" mass="0.8447" diaginertia="0.00247074 0.00247074 0.000380115" />
-       <joint name="jaco_joint_2" pos="0 0 0" axis="0 0 1" limited="true" range="0.820305 5.46288" damping="70" />
+       <joint name="jaco_joint_2" pos="0 0 0" axis="0 0 1" limited="true" range="0.820305 5.46288" class="large_joint"/>
        <geom name="jaco_link_2" type="mesh" rgba="0.17 0.17 0.17 1" mesh="arm_half_1" />
+         <geom name="ring_2" class="large_ring" mass="1e-9"/>
 
-      <body name="jaco_link_3" pos="0 -0.205 0" quat="0.707107 -0.707107 0 0">
+      <body name="b_3" pos="0 -0.205 0" quat="0.707107 -0.707107 0 0">
         <inertial pos="0 0 -0.102245" mass="0.8447" diaginertia="0.00247074 0.00247074 0.000380115" />
-        <joint name="jaco_joint_3" pos="0 0 0" axis="0 0 1" limited="true" range="-629 628" damping="20" />
+        <joint name="jaco_joint_3" pos="0 0 0" axis="0 0 1" class="large_joint" />
         <geom name="jaco_link_3" type="mesh" rgba="0.17 0.17 0.17 1" mesh="arm_half_2" />
+         <geom name="ring_3" class="large_ring" mass="1e-9"/>
 
-      <body name="jaco_link_4"  pos="0 0 -0.205" quat="0 0 0.707107 0.707107">
+      <body name="b_4"  pos="0 0 -0.205" quat="0 0 0.707107 0.707107">
         <inertial pos="0 0.081 -0.0086" quat="0.707107 0.707107 0 0" mass="0.6763" diaginertia="0.00142022 0.00142022 0.000304335" />
-        <joint name="jaco_joint_4" pos="0 0 0" axis="0 0 1" limited="true" range="0.523599 5.75959" damping="70"/>
+        <joint name="jaco_joint_4" pos="0 0 0" axis="0 0 1" limited="true" range="0.523599 5.75959"  class="large_joint"/>
         <geom name="jaco_link_4" type="mesh" rgba="0.17 0.17 0.17 1" mesh="forearm" />
+         <geom name="ring_4" class="large_ring" mass="1e-9"/>
 
-      <body name="jaco_link_5"  pos="0 0.2073 -0.0114" quat="0 0 -0.707107 0.707107">
+      <body name="b_5"  pos="0 0.2073 -0.0114" quat="0 0 -0.707107 0.707107">
          <inertial pos="0 0.00288489 -0.0541933" mass="0.463" diaginertia="0.000432132 0.000432132 9.26e-05" />
-         <joint name="jaco_joint_5" pos="0 0 0" axis="0 0 1" limited="true" range="-628 628" damping="20"/>
+         <joint name="jaco_joint_5" pos="0 0 0" axis="0 0 1"  class="small_joint"/>
          <geom name="jaco_link_5" type="mesh" rgba="0.17 0.17 0.17 1" mesh="wrist_spherical_1" />
+         <geom name="ring_5" class="small_ring" mass="1e-9"/>
 
-      <body name="jaco_link_6" pos="0 0 -0.10375" quat="0 0 0.707107 0.707107">
+      <body name="b_6" pos="0 0 -0.10375" quat="0 0 0.707107 0.707107">
          <inertial pos="0 0.0497209 -0.00285628" quat="0.707107 0.707107 0 0" mass="0.463" diaginertia="0.000432132 0.000432132 9.26e-05" />
-         <joint name="jaco_joint_6" pos="0 0 0" axis="0 0 1" limited="true" range="1.13446 5.14872" damping="20" />
+         <joint name="jaco_joint_6" pos="0 0 0" axis="0 0 1" limited="true" range="1.13446 5.14872"  class="small_joint" />
          <geom name="jaco_link_6" type="mesh" rgba="0.17 0.17 0.17 1" mesh="wrist_spherical_2" />
+         <geom name="ring_6" class="small_ring" mass="1e-9"/>
 
-      <body name="jaco_link_7" pos="0 0.10375 0" quat="0 0 -0.707107 0.707107">
+      <body name="b_7" pos="0 0.10375 0" quat="0 0 -0.707107 0.707107">
          <inertial pos="0 0 -0.06" quat="0.5 0.5 -0.5 0.5" mass="0.99" diaginertia="0.0005816 0.000345324 0.000345324" />
-         <joint name="jaco_joint_7" pos="0 0 0" axis="0 0 1" limited="true" range="-628 628"  damping="20"/>
-         <geom name="jaco_link_7" type="mesh" rgba="0.73 0.73 0.73 1" mesh="hand_3finger" />
+         <joint name="jaco_joint_7" pos="0 0 0" axis="0 0 1"  class="small_joint"/>
+         <geom name="jaco_link_7" type="mesh" rgba="0.17 0.17 0.17 1" mesh="hand_3finger" />
 
-      <body name="jaco_link_finger_1" pos="0.00279 0.03126 -0.11467" quat="0.379408 -0.662973 -0.245899 0.596699">
+         <geom name="ring_7" class="small_ring" mass="1e-9"/>
+
+         <site name="wristsite" quat="0.0, 0.70710678118 0.70710678118 0.0"/>
+
+
+    <site name="gripsite" pos="0 -0.0001 -.159" quat="0 0.70710678118 0.70710678118 0"/>
+    <site name="pinchsite" pos="0.015 0.0024 -0.193" quat="0 0.70710678118 0.70710678118 0"/>
+      <body name="b_finger_1" pos="0.00279 0.03126 -0.11467" quat="0.379408 -0.662973 -0.245899 0.596699">
          <inertial pos="0.022 0 0" mass="0.01" diaginertia="7.89997e-07 7.89997e-07 8e-08" />
-         <joint name="jaco_joint_finger_1" pos="0 0 0" axis="0 0 1" limited="true" range="0 1.51"  damping="20"/>
-         <geom name="jaco_link_finger_1" type="mesh" rgba="0.17 0.17 0.17 1" mesh="finger_proximal" />
+         <joint name="jaco_joint_finger_1" pos="0 0 0" axis="0 0 1" limited="true" range="0 1.51"  frictionloss="0.1" armature="0.1" damping="0.75"/>
+         <geom name="jaco_link_finger_1" class="finger" type="mesh" mesh="finger_proximal" />
 
-      <body name="jaco_link_finger_tip_1" pos="0.044 -0.003 0">
+      <body name="b_finger_tip_1" pos="0.044 -0.003 0">
           <inertial pos="0.022 0 0" mass="0.01" diaginertia="7.89997e-07 7.89997e-07 8e-08" />
-          <joint name="jaco_joint_finger_tip_1" pos="0 0 0" axis="0 0 1" limited="true" range="0 2"  damping="20"/>
-          <geom name="jaco_link_finger_tip_1" type="mesh" rgba="0.73 0.73 0.73 1" mesh="finger_distal" />
+          <joint name="jaco_joint_finger_tip_1" pos="0 0 0" axis="0 0 1" limited="true" range="0 2" frictionloss="0.1" armature="0.1" damping="0.75"/>
+          <geom name="jaco_link_finger_tip_1" class="finger_distal" type="mesh" mesh="finger_distal" />
         </body>
         </body>
-       <body name="jaco_link_finger_2" pos="0.02226 -0.02707 -0.11482" quat="0.659653 -0.37146 0.601679 -0.254671">
+       <body name="b_finger_2" pos="0.02226 -0.02707 -0.11482" quat="0.659653 -0.37146 0.601679 -0.254671">
            <inertial pos="0.022 0 0" mass="0.01" diaginertia="7.89997e-07 7.89997e-07 8e-08" />
-           <joint name="jaco_joint_finger_2" pos="0 0 0" axis="0 0 1" limited="true" range="0 1.51"  damping="20"/>
-           <geom name="jaco_link_finger_2" type="mesh" rgba="0.17 0.17 0.17 1" mesh="finger_proximal" />
+           <joint name="jaco_joint_finger_2" pos="0 0 0" axis="0 0 1" limited="true" range="0 1.51" frictionloss="0.1" armature="0.1" damping="0.75"/>
+           <geom name="b_finger_2" class="finger" type="mesh" mesh="finger_proximal" />
 
-       <body name="jaco_link_finger_tip_2"  pos="0.044 -0.003 0">
+       <body name="b_finger_tip_2"  pos="0.044 -0.003 0">
            <inertial pos="0.022 0 0" mass="0.01" diaginertia="7.89997e-07 7.89997e-07 8e-08" />
-           <joint name="jaco_joint_finger_tip_2" pos="0 0 0" axis="0 0 1" limited="true" range="0 2"  damping="20"/>
-           <geom name="jaco_link_finger_tip_2" type="mesh" rgba="0.73 0.73 0.73 1" mesh="finger_distal" />
+           <joint name="jaco_joint_finger_tip_2" pos="0 0 0" axis="0 0 1" limited="true" range="0 2" frictionloss="0.1" armature="0.1" damping="0.75"/>
+           <geom name="jaco_link_finger_tip_2"  class="finger_distal" type="mesh" mesh="finger_distal" />
 
         </body>
         </body>
-       <body name="jaco_link_finger_3" pos="-0.02226 -0.02707 -0.11482" quat="0.601679 -0.254671 0.659653 -0.37146">
+       <body name="b_finger_3" pos="-0.02226 -0.02707 -0.11482" quat="0.601679 -0.254671 0.659653 -0.37146">
             <inertial pos="0.022 0 0" mass="0.01" diaginertia="7.89997e-07 7.89997e-07 8e-08" />
-            <joint name="jaco_joint_finger_3" pos="0 0 0" axis="0 0 1" limited="true" range="0 1.51"  damping="20"/>
-            <geom name="jaco_link_finger_3" type="mesh" rgba="0.17 0.17 0.17 1" mesh="finger_proximal" />
+            <joint name="jaco_joint_finger_3" pos="0 0 0" axis="0 0 1" limited="true" range="0 1.51" frictionloss="0.1" armature="0.1" damping="0.75"/>
+            <geom name="jaco_link_finger_3" class="finger" type="mesh" mesh="finger_proximal" />
 
-       <body name="jaco_link_finger_tip_3" pos="0.044 -0.003 0">
+       <body name="b_finger_tip_3" pos="0.044 -0.003 0">
              <inertial pos="0.022 0 0" mass="0.01" diaginertia="7.89997e-07 7.89997e-07 8e-08" />
-             <joint name="jaco_joint_finger_tip_3" pos="0 0 0" axis="0 0 1" limited="true" range="0 2"  damping="20"/>
-             <geom name="jaco_link_finger_tip_3" type="mesh" rgba="0.73 0.73 0.73 1" mesh="finger_distal" />
+             <joint name="jaco_joint_finger_tip_3" pos="0 0 0" axis="0 0 1" limited="true" range="0 2" frictionloss="0.1" armature="0.1" damping="0.75"/>
+             <geom name="jaco_link_finger_tip_3" class="finger_distal" type="mesh" mesh="finger_distal" />
         </body>
         </body>
 
-        </body>
-        </body>
-        </body>
-        </body>
-        </body>
-        </body>
-        </body>
 
-    <!-- I added fences below to visualize software fence boundaries. The robot will not receive a goal outside of this region, nor will it be allowed to place a joint outside of the fence. Ideally we would use planes and allow the simulator to tell us if we collide, but this seems to cause the simulation to be unstable. Capsules are a compromise in that they allow us to pass the fence info to the model and evaluate in a visual way.  -->
+</body>
+</body>
+</body>
+</body>
+</body>
+</body>
+</body>
+</body>
 
-    <!--
-    <geom name="low_fence_pos_x" type="capsule" fromto=".5 .4 .1 .5 -1 .1"  size=".001" condim=1 friction=0 rgba="1 0 0 1" mass="0"/>
-    <geom name="low_fence_neg_x" type="capsule" fromto="-.5 .4 .1 -.5 -1 .1"  size=".001" condim=1 friction=0 rgba="1 0 0 1" mass="0"/>
-
-    <geom name="low_fence_pos_y" type="capsule" fromto="-.5 .4 .1 .5 .4 .1"  size=".001" condim=1 friction=0 rgba="0 1 0 1" mass="0"/>
-    <geom name="low_fence_neg_y" type="capsule" fromto="-.5 -1 .1 .5 -1 .1"  size=".001" condim=1 friction=0 rgba="0 1 0 1" mass="0"/>
+</worldbody>
 
 
-    <geom name="high_fence_pos_x" type="capsule" fromto=".5 .4 3 .5 -1 2"  size=".001" condim=1 friction=0 rgba="1 0 0 1" mass="0"/>
-    <geom name="high_fence_neg_x" type="capsule" fromto="-.5 .4 3 -.5 -1 2"  size=".001" condim=1 friction=0 rgba="1 0 0 1" mass="0"/>
-
-    <geom name="high_fence_pos_y" type="capsule" fromto="-.5 .4 3 .5 .4 2"  size=".001" condim=1 friction=0 rgba="0 1 0 1" mass="0"/>
-    <geom name="high_fence_neg_y" type="capsule" fromto="-.5 -1 3 .5 -1 2"  size=".001" condim=1 friction=0 rgba="0 1 0 1" mass="0"/>
---> 
-    </worldbody>
-
-
-  <!-- actuators are not directly from urdf and are a best guess based on reading Kinova docs - likely some aspects are incorrect -->
-  <!--  ================= Velocity actuators ================= /-->
-
-   <!-- ctrl range prevents joint from turning this many radians - 
-         according to kinova docs - big actuators should be limited to 
-       36 deg/sec (.62 rad/sec), small to 48 deg/sec (.837 rad/sec), and fingers 1080 deg/sec 18.8
-
-I'm not sure about kv. kv=55 was too high and caused instability. kv=25 seems to work
-I tried using only position actuators, but the simulation was shaky, so leaving in the velocity actuators
-
-If the gain is too high, the simulation seems to collapse
-I think the vel range may be too low - 100 deg per sec on joint 7 is really slow at 100hz
--->
+<!--  ================= Position actuators ================= -->
 <!--
-  <actuator>
-    <velocity joint='jaco_joint_1'  kv="45" name='vel_act_1' ctrlrange="-.628 .628" ctrllimited="true"/>
-    <velocity joint='jaco_joint_2'  kv="45" name='vel_act_2' ctrlrange="-.628 .628" ctrllimited="true"/>
-    <velocity joint='jaco_joint_3'  kv="25" name='vel_act_3' ctrlrange="-.628 .628" ctrllimited="true"/>
-    <velocity joint='jaco_joint_4'  kv="25" name='vel_act_4' ctrlrange="-.628 .628" ctrllimited="true"/>
-    <velocity joint='jaco_joint_5'  kv="25" name='vel_act_5' ctrlrange="-.837 .837" ctrllimited="true"/>
-    <velocity joint='jaco_joint_6'  kv="25" name='vel_act_6' ctrlrange="-.837 .837" ctrllimited="true"/>
-    <velocity joint='jaco_joint_7'  kv="25" name='vel_act_7' ctrlrange="-.837 .837" ctrllimited="true"/>
- </actuator>
+ * actuators are not directly from urdf and are a best guess based on reading Kinova docs, some aspect may be incorrect
+ * order of joint specification is important - major to minor. fingers are optional 
+ * min/max ctrl position of joints 1,3,5,7 is actually -+10,000 but that seemed excessive
+* ctrl range prevents joint from turning this many radians
+* according to kinova docs - big actuators should be limited to 36 deg/sec (.62 rad/sec), small to 48 deg/sec (.837 rad/sec), and fingers 1080 deg/sec 18.8
+* without gravity (not needed for position controllers), the gain can be much smaller
+* servo may not reach position within timelimit. It is important that relative step sizcontrol step , gain are tuned. 
 -->
+<actuator>
+    <position joint='jaco_joint_1'    name='pos_act_joint_1' kp="150" ctrllimited='false'/>
+    <position joint='jaco_joint_2'  name='pos_act_joint_2' kp="150" ctrlrange='.8 5.46' ctrllimited='true'/>
+    <position joint='jaco_joint_3'  name='pos_act_joint_3' kp="150" ctrllimited='false'/>
+    <position joint='jaco_joint_4'  name='pos_act_joint_4' kp="150" ctrlrange='.5 5.759' ctrllimited='true'/>
+    <position joint='jaco_joint_5'  name='pos_act_joint_5' kp="50" ctrllimited='false'/>
+    <position joint='jaco_joint_6'  name='pos_act_joint_6' kp="50"  ctrlrange='1.1344 5.148' ctrllimited='true'/>
+    <position joint='jaco_joint_7'  name='pos_act_joint_7' kp="50" ctrllimited='false'/>
+    <position joint='jaco_joint_finger_1' name='pos_act_finger_1'          kp="15"  ctrlrange="0 1.51" ctrllimited="true"/>
+    <position joint='jaco_joint_finger_tip_1'  name='pos_act_finger_tip_1' kp="15" ctrlrange="0 2" ctrllimited="true"/>
+    <position joint='jaco_joint_finger_2' name='pos_act_finger_2'          kp="15"  ctrlrange="0 1.51" ctrllimited="true"/>
+    <position joint='jaco_joint_finger_tip_2'  name='pos_act_finger_tip_2' kp="15" ctrlrange="0 2" ctrllimited="true"/>
+    <position joint='jaco_joint_finger_3' name='pos_act_finger_3'          kp="15"  ctrlrange="0 1.51" ctrllimited="true"/>
+    <position joint='jaco_joint_finger_tip_3'  name='pos_act_finger_tip_3' kp="15" ctrlrange="0 2" ctrllimited="true"/>
+</actuator>
 
-<!--
-    <velocity joint='jaco_joint_finger_1' kv="25" name='vel_act_finger_1'  ctrlrange="-18.849 18.849" ctrllimited="true"/>
-    <velocity joint='jaco_joint_finger_2' kv="25" name='vel_act_finger_2'  ctrlrange="-18.849 18.849" ctrllimited="true"/>
-    <velocity joint='jaco_joint_finger_3' kv="25" name='vel_act_finger_3'  ctrlrange="-18.849 18.849" ctrllimited="true"/>
-    <velocity joint='jaco_joint_finger_tip_1' kv="25" name='vel_act_finger_tip_1' ctrlrange="-18.849 18.849" ctrllimited="true"/>
-    <velocity joint='jaco_joint_finger_tip_2' kv="25" name='vel_act_finger_tip_2' ctrlrange="-18.849 18.849" ctrllimited="true"/>
-    <velocity joint='jaco_joint_finger_tip_3' kv="25" name='vel_act_finger_tip_3' ctrlrange="-18.849 18.849" ctrllimited="true"/>
--->
+  <!-- Prevent contact between the base and the first body when the base is a direct child of the worldbody. -->
+  <contact>
+    <exclude body1="b_base" body2="b_1"/>
+    <exclude body1="b_7" body2="b_finger_1"/>
+    <exclude body1="b_7" body2="b_finger_2"/>
+    <exclude body1="b_7" body2="b_finger_3"/>
+  </contact>
 
-<!--
-   <actuator>
-    <motor joint='jaco_joint_1'  name='mot_act_joint_1' gear="200"  ctrlrange='-628 628' ctrllimited='true'/>
-    <motor joint='jaco_joint_2'  name='mot_act_joint_2' gear="200" ctrlrange='.8 5.46' ctrllimited='true'/>
-    <motor joint='jaco_joint_3'  name='mot_act_joint_3' gear="200" ctrlrange='-628 628' ctrllimited='true'/>
-    <motor joint='jaco_joint_4'  name='mot_act_joint_4' gear="200" ctrlrange='.5 5.759' ctrllimited='true'/>
-    <motor joint='jaco_joint_5'  name='mot_act_joint_5' gear="55"  ctrlrange='-628 628' ctrllimited='true'/>
-    <motor joint='jaco_joint_6'  name='mot_act_joint_6' gear="55"  ctrlrange='1.1344 5.148' ctrllimited='true'/>
-    <motor joint='jaco_joint_7'  name='mot_act_joint_7' gear="55"  ctrlrange='-628 628' ctrllimited='true'/>
-    <motor joint='jaco_joint_finger_1' name='mot_act_finger_1' gear="10" ctrlrange="0 118.68" ctrllimited="true"/>
-    <motor joint='jaco_joint_finger_2' name='mot_act_finger_2' gear="10" ctrlrange="0 118.68" ctrllimited="true"/>
-    <motor joint='jaco_joint_finger_3' name='mot_act_finger_3' gear="10" ctrlrange="0 118.68" ctrllimited="true"/>
-    <motor joint='jaco_joint_finger_tip_1' name='mot_act_finger_tip_1' gear="10" ctrlrange="0 118.68" ctrllimited="true"/>
-    <motor joint='jaco_joint_finger_tip_2' name='mot_act_finger_tip_2' gear="10" ctrlrange="0 118.68" ctrllimited="true"/>
-    <motor joint='jaco_joint_finger_tip_3' name='mot_act_finger_tip_3' gear="10" ctrlrange="0 118.68" ctrllimited="true"/>
-  </actuator>
--->
-
- <!-- position actuators
-  ~10 damping is important or the limbs shake
-  kp should be around 55 for position actuators - too high and things become unstable-->
-  <!- order of joint specification is important - major to minor. fingers are optional -->
-  <!- min/max ctrl position of joints 1,3,5,7 is actually -+10,000 but that seemed excessive -->
-
-  <actuator>
-    <!-- joint 1: needs to be rather strong - at least 1600-->
-    <position joint='jaco_joint_1'    name='pos_act_joint_1' kp="1000" ctrlrange='-12.566 12.566' ctrllimited='true'/>
-    <!-- joint 2: kp=100 for joint 2 is too low for it to fight gravity -->
-    <!-- joint 2: kp=200 for joint 2 seems good -->
-    <position joint='jaco_joint_2'  name='pos_act_joint_2' kp="3000"  ctrlrange='.8 5.46' ctrllimited='true'/>
-    <position joint='jaco_joint_3'  name='pos_act_joint_3' kp="2000"  ctrlrange='-12.566 12.566' ctrllimited='true'/>
-    <position joint='jaco_joint_4'  name='pos_act_joint_4' kp="3000"  ctrlrange='.5 5.759' ctrllimited='true'/>
-    <position joint='jaco_joint_5'  name='pos_act_joint_5' kp="700"   ctrlrange='-12.566 12.566' ctrllimited='true'/>
-    <position joint='jaco_joint_6'  name='pos_act_joint_6' kp="700"   ctrlrange='1.1344 5.148' ctrllimited='true'/>
-    <position joint='jaco_joint_7'  name='pos_act_joint_7' kp="700"   ctrlrange='-12.566 12.566' ctrllimited='true'/>
-    <position joint='jaco_joint_finger_1' name='pos_act_finger_1'          kp="700"  ctrlrange="0 1.51" ctrllimited="true"/>
-    <position joint='jaco_joint_finger_tip_1'  name='pos_act_finger_tip_1' kp="700" ctrlrange="0 2" ctrllimited="true"/>
-    <position joint='jaco_joint_finger_2' name='pos_act_finger_2'          kp="700"  ctrlrange="0 1.51" ctrllimited="true"/>
-    <position joint='jaco_joint_finger_tip_2'  name='pos_act_finger_tip_2' kp="700" ctrlrange="0 2" ctrllimited="true"/>
-    <position joint='jaco_joint_finger_3' name='pos_act_finger_3'          kp="700"  ctrlrange="0 1.51" ctrllimited="true"/>
-<!-- bottom finger tip when in home position -->
-    <position joint='jaco_joint_finger_tip_3'  name='pos_act_finger_tip_3' kp="700" ctrlrange="0 2" ctrllimited="true"/>
-  </actuator>
-
-   <!--  ================= Actuator Sensors ================= /-->
-   <!--
-  <sensor>
-    <actuatorvel actuator='vel_act_1'  name='sense_1_vel'/>
-    <actuatorvel actuator='vel_act_2'  name='sense_2_vel'/>
-    <actuatorvel actuator='vel_act_3'  name='sense_3_vel'/>
-    <actuatorvel actuator='vel_act_4'  name='sense_4_vel'/>
-    <actuatorvel actuator='vel_act_5'  name='sense_5_vel'/>
-    <actuatorvel actuator='vel_act_6'  name='sense_6_vel'/>
-    <actuatorvel actuator='vel_act_7'  name='sense_7_vel'/>
-    <actuatorfrc actuator='vel_act_1'  name='sense_1_frc'/>
-    <actuatorfrc actuator='vel_act_2'  name='sense_2_frc'/>
-    <actuatorfrc actuator='vel_act_3'  name='sense_3_frc'/>
-    <actuatorfrc actuator='vel_act_4'  name='sense_4_frc'/>
-    <actuatorfrc actuator='vel_act_5'  name='sense_5_frc'/>
-    <actuatorfrc actuator='vel_act_6'  name='sense_6_frc'/>
-    <actuatorfrc actuator='vel_act_7'  name='sense_7_frc'/>
-  </sensor>
--->
-
-  </mujoco>
+</mujoco>

@@ -19,5 +19,9 @@ for example receiving a positive reward.
     <material name="target_default" rgba=".6 .3 .3 1"/>
     <material name="target_highlight" rgba=".6 .3 .3 .4"/>
     <material name="site" rgba=".5 .5 .5 .3"/>
+    <material name="dark_gray" rgba="0.1 0.1 0.1 1"/>
+    <material name="light_gray" rgba="0.45 0.45 0.45 1"/>
+    <material name="reference_site" rgba="1 0 0 0.5"/>
   </asset>
 </mujoco>
+

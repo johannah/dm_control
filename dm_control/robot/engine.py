@@ -103,6 +103,7 @@ class RobotClient():
     return self.send('HOME')
 
   def reset(self):
+    print('robot sending reset')
     return self.decode_state(self.send('RESET'))
   
   def get_state(self):
@@ -139,14 +140,28 @@ class Physics(_control.Physics):
   rgb = physics.render(height=240, width=320, id=0)
 
   """
-  def __init(self):
+  def __init__(self):
+      self.type = 'robot'
       print("AT ROBOT/PHYSICS")
 
-  def initialize(self, robot_server_ip='127.0.0.1', robot_server_port=9030, fence={'x':[-.5,.5], 'y':[-.5,.3], 'z':[0.1, 1.2]}):
+  def initialize(self, robot_name='j2s7s300', robot_server_ip='127.0.0.1', robot_server_port=9030, fence={'x':[-.5,.5], 'y':[-.5,.3], 'z':[0.1, 1.2]}, control_type='position'):
+    # only compatible with j2
+    robot_model = robot_name[:2]
+    assert robot_model == 'j2'
+    # only tested with 7dof, though 6dof should work with tweaks 
+    self.n_major_actuators = int(robot_name[3:4])
+    assert self.n_major_actuators == 7
+    # only tested with s3 hand
+    hand_type = robot_name[4:6]
+    assert hand_type == 's3'
+    if hand_type == 's3':
+        self.n_hand_actuators = 6
+    self.n_actuators = self.n_major_actuators + self.n_hand_actuators
+
     self.fence = fence
-    # TODO hack!
-    self.data = np.zeros(7)
+    self.control_type = 'position'
     self.n_actuators = 13
+    self.data = np.zeros(self.n_actuators)
     self.experiment_timestep = 0
     self.robot_server_ip = robot_server_ip
     self.robot_server_port = robot_server_port
@@ -166,42 +181,41 @@ class Physics(_control.Physics):
     Args:
       control: NumPy array or array-like actuation values.
     """
-    self.data = control[:7]
+    self.data = control[:self.n_major_actuators]
     print('setting control', control, self.data)
 
   def step(self):
     """Advances physics with up-to-date position and velocity dependent fields.
     """
-    print("stepping", self.data)
+    # TODO - only step once for real robot
     self.handle_state(self.robot_client.step(command_type='ANGLE', relative=False, unit='rad', data=self.data))
 
-#  def render(self, height=240, width=320, camera_id=-1, overlays=(),
-#             depth=False, segmentation=False, scene_option=None):
-#    """Returns a camera view as a NumPy array of pixel values.
-#
-#    Args:
-#      height: Viewport height (number of pixels). Optional, defaults to 240.
-#      width: Viewport width (number of pixels). Optional, defaults to 320.
-#      camera_id: Optional camera name or index. Defaults to -1, the free
-#        camera, which is always defined. A nonnegative integer or string
-#        corresponds to a fixed camera, which must be defined in the model XML.
-#        If `camera_id` is a string then the camera must also be named.
-#      overlays: An optional sequence of `TextOverlay` instances to draw. Only
-#        supported if `depth` is False.
-#      depth: If `True`, this method returns a NumPy float array of depth values
-#        (in meters). Defaults to `False`, which results in an RGB image.
-#      segmentation: If `True`, this method returns a 2-channel NumPy int32 array
-#        of label values where the pixels of each object are labeled with the
-#        pair (mjModel ID, mjtObj enum object type). Background pixels are
-#        labeled (-1, -1). Defaults to `False`, which returns an RGB image.
-#      scene_option: An optional `wrapper.MjvOption` instance that can be used to
-#        render the scene with custom visualization options. If None then the
-#        default options will be used.
-#
-#    Returns:
-#      The rendered RGB, depth or segmentation image.
-#    """
-#    pass
+  def render(self, height=240, width=320, camera_id=-1, overlays=(), 
+         depth=False, segmentation=False, scene_option=None):
+    """
+    Args:
+      height: Viewport height (number of pixels). Optional, defaults to 240.
+      width: Viewport width (number of pixels). Optional, defaults to 320.
+      camera_id: Optional camera name or index. Defaults to -1, the free
+        camera, which is always defined. A nonnegative integer or string
+        corresponds to a fixed camera, which must be defined in the model XML.
+        If `camera_id` is a string then the camera must also be named.
+      overlays: An optional sequence of `TextOverlay` instances to draw. Only
+        supported if `depth` is False.
+      depth: If `True`, this method returns a NumPy float array of depth values
+        (in meters). Defaults to `False`, which results in an RGB image.
+      segmentation: If `True`, this method returns a 2-channel NumPy int32 array
+        of label values where the pixels of each object are labeled with the
+        pair (mjModel ID, mjtObj enum object type). Background pixels are
+        labeled (-1, -1). Defaults to `False`, which returns an RGB image.
+      scene_option: An optional `wrapper.MjvOption` instance that can be used to
+        render the scene with custom visualization options. If None then the
+        default options will be used.
+
+    Returns:
+      The rendered RGB, depth or segmentation image.
+    """
+    return np.zeros((height,width,3))
 
   def get_state(self):
     """Returns the physics state.
@@ -276,6 +290,7 @@ class Physics(_control.Physics):
 
   def reset(self):
     """Resets internal variables of the physics simulation."""
+    print('line 281 reset')
     self.n_steps = 0
     self.experiment_timestep = 0
     self.handle_state(self.robot_client.reset())
@@ -292,8 +307,9 @@ class Physics(_control.Physics):
     # quantities that depend on acceleration (and therefore on the state of the
     # controls). For example `mj_forward` updates accelerometer and gyro
     # readings, whereas `mj_step1` does not.
-    with self.check_invalid_state():
-      mjlib.mj_forward(self.model.ptr, self.data.ptr)
+    #with self.check_invalid_state():
+    #  mjlib.mj_forward(self.model.ptr, self.data.ptr)
+    pass
 
   #@contextlib.contextmanager
   #def check_invalid_state(self):
@@ -340,8 +356,10 @@ class Physics(_control.Physics):
     return self.actuator_velocity()
 
   def timestep(self):
-    """Returns the simulation timestep."""
-    return .02
+    """Returns the timestep."""
+    # TODO - set this to .001 to match xml file for mujoco simulation - this is a hack for position control, 
+    # but won't work for velocity/torque control. Ros runs at ~52 Hz. 
+    return .001
 
   def time(self):
     """Returns episode time in seconds."""

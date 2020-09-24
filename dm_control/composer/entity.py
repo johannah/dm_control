@@ -318,7 +318,7 @@ class Entity(object):
   def detach(self):
     """Detaches this entity if it has previously been attached."""
     if self._parent is not None:
-      parent = self._parent()
+      parent = self._parent()  # pylint: disable=not-callable
       if parent:  # Weakref might dereference to None during garbage collection.
         self.mjcf_model.detach()
         parent._attached.remove(self)  # pylint: disable=protected-access
@@ -329,11 +329,89 @@ class Entity(object):
   @property
   def parent(self):
     """Returns the `Entity` to which this entity is attached, or `None`."""
-    return self._parent() if self._parent else None
+    return self._parent() if self._parent else None  # pylint: disable=not-callable
 
   @property
   def attachment_site(self):
     return self.mjcf_model
+
+  @property
+  def root_body(self):
+    if self.parent:
+      return mjcf.get_attachment_frame(self.mjcf_model)
+    else:
+      return self.mjcf_model.worldbody
+
+  def global_vector_to_local_frame(self, physics, vec_in_world_frame):
+    """Linearly transforms a world-frame vector into entity's local frame.
+
+    Note that this function does not perform an affine transformation of the
+    vector. In other words, the input vector is assumed to be specified with
+    respect to the same origin as this entity's local frame. This function
+    can also be applied to matrices whose innermost dimensions are either 2 or
+    3. In this case, a matrix with the same leading dimensions is returned
+    where the innermost vectors are replaced by their values computed in the
+    local frame.
+
+    Args:
+      physics: An `mjcf.Physics` instance.
+      vec_in_world_frame: A NumPy array with last dimension of shape (2,) or
+      (3,) that represents a vector quantity in the world frame.
+
+    Returns:
+      The same quantity as `vec_in_world_frame` but reexpressed in this
+      entity's local frame. The returned np.array has the same shape as
+      np.asarray(vec_in_world_frame).
+
+    Raises:
+      ValueError: if `vec_in_world_frame` does not have shape ending with (2,)
+        or (3,).
+    """
+    vec_in_world_frame = np.asarray(vec_in_world_frame)
+
+    xmat = np.reshape(physics.bind(self.root_body).xmat, (3, 3))
+    # The ordering of the np.dot is such that the transformation holds for any
+    # matrix whose final dimensions are (2,) or (3,).
+    if vec_in_world_frame.shape[-1] == 2:
+      return np.dot(vec_in_world_frame, xmat[:2, :2])
+    elif vec_in_world_frame.shape[-1] == 3:
+      return np.dot(vec_in_world_frame, xmat)
+    else:
+      raise ValueError('`vec_in_world_frame` should have shape with final '
+                       'dimension 2 or 3: got {}'.format(
+                           vec_in_world_frame.shape))
+
+  def global_xmat_to_local_frame(self, physics, xmat):
+    """Transforms another entity's `xmat` into this entity's local frame.
+
+    This function takes another entity's (E) xmat, which is an SO(3) matrix
+    from E's frame to the world frame, and turns it to a matrix that transforms
+    from E's frame into this entity's local frame.
+
+    Args:
+      physics: An `mjcf.Physics` instance.
+      xmat: A NumPy array of shape (3, 3) or (9,) that represents another
+        entity's xmat.
+
+    Returns:
+      The `xmat` reexpressed in this entity's local frame. The returned
+      np.array has the same shape as np.asarray(xmat).
+
+    Raises:
+      ValueError: if `xmat` does not have shape (3, 3) or (9,).
+    """
+    xmat = np.asarray(xmat)
+
+    input_shape = xmat.shape
+    if xmat.shape == (9,):
+      xmat = np.reshape(xmat, (3, 3))
+
+    self_xmat = np.reshape(physics.bind(self.root_body).xmat, (3, 3))
+    if xmat.shape == (3, 3):
+      return np.reshape(np.dot(self_xmat.T, xmat), input_shape)
+    else:
+      raise ValueError('`xmat` should have shape (3, 3) or (9,): got {}'.format(
+          xmat.shape))
 
   def get_pose(self, physics):
     """Get the position and orientation of this entity relative to its parent.
@@ -455,6 +533,26 @@ class Entity(object):
         self.set_velocity(physics, rotated_velocity)
     self.set_pose(physics, new_position, new_quaternion)
 
+  def get_velocity(self, physics):
+    """Gets the linear and angular velocity of this free entity.
+
+    Args:
+      physics: An instance of `mjcf.Physics`.
+
+    Returns:
+      A 2-tuple where the first entry is a (3,) numpy array representing the
+      linear velocity and the second is a (3,) numpy array representing the
+      angular velocity.
+
+    """
+    root_joint = mjcf.get_frame_freejoint(self.mjcf_model)
+    if root_joint:
+      velocity = physics.bind(root_joint).qvel[:3]
+      angular_velocity = physics.bind(root_joint).qvel[3:]
+      return velocity, angular_velocity
+    else:
+      raise ValueError('get_velocity cannot be used on a non-free entity')
+
   def set_velocity(self, physics, velocity=None, angular_velocity=None):
     """Sets the linear velocity and/or angular velocity of this free entity.
 
@@ -476,6 +574,22 @@ class Entity(object):
         physics.bind(root_joint).qvel[3:] = angular_velocity
     else:
       logging.warning('Cannot set velocity on Entity with no free joint.')
+
+  def configure_joints(self, physics, position):
+    """Configures this entity's internal joints.
+
+    The default implementation of this method simply sets the `qpos` of all
+    joints in this entity to the values specified in the `position` argument.
+    Entity subclasses with actuated joints may override this method to achieve a
+    stable reconfiguration of joint positions, for example the control signal
+    of position actuators may be changed to match the new joint positions.
+
+    Args:
+      physics: An instance of `mjcf.Physics`.
+      position: The desired position of this entity's joints.
+    """
+    joints = self.mjcf_model.find_all('joint', exclude_attachments=True)
+    physics.bind(joints).qpos = position
 
 
 class ModelWrapperEntity(Entity):

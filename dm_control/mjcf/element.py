@@ -41,6 +41,9 @@ from six.moves import zip
 _raw_property = property  # pylint: disable=invalid-name
 
 
+_CONFLICT_BEHAVIOR_FUNC = {'min': min, 'max': max}
+
+
 def property(method):  # pylint: disable=redefined-builtin
   """Modifies `@property` to keep track of any `AttributeError` raised.
 
@@ -401,7 +404,8 @@ class _ElementImpl(base.Element):
       raise ValueError(
           '`identifier` should be a string: got {!r}'.format(identifier))
     if namespace not in schema.FINDABLE_NAMESPACES:
-      raise ValueError('{!r} is not a valid namespace.'.format(namespace))
+      raise ValueError('{!r} is not a valid namespace. Available: {}.'.format(
+          namespace, schema.FINDABLE_NAMESPACES))
     if constants.PREFIX_SEPARATOR in identifier:
       scope_name = identifier.split(constants.PREFIX_SEPARATOR)[0]
       try:
@@ -450,7 +454,8 @@ class _ElementImpl(base.Element):
       ValueError: if `namespace` is not a valid namespace.
     """
     if namespace not in schema.FINDABLE_NAMESPACES:
-      raise ValueError('{!r} is not a valid namespace.'.format(namespace))
+      raise ValueError('{!r} is not a valid namespace. Available: {}'.format(
+          namespace, schema.FINDABLE_NAMESPACES))
     out = []
     children = self._children if exclude_attachments else self.all_children()
     for child in children:
@@ -613,7 +618,7 @@ class _ElementImpl(base.Element):
       # instrumented @property decorator.
       exc_info = self._last_attribute_error
       self._last_attribute_error = None
-      six.reraise(*exc_info)
+      six.reraise(*exc_info)  # pylint: disable=not-an-iterable
     elif name in self._spec.children:
       return self.get_children(name)
     elif name in self._spec.attributes:
@@ -859,9 +864,11 @@ class _ElementImpl(base.Element):
 
       self_attribute = self._attributes[attribute_name]
       if other_attribute is not None:
-        if self_attribute.conflict_behavior == 'max':
+        if self_attribute.conflict_behavior in _CONFLICT_BEHAVIOR_FUNC:
           if self_attribute.value is not None:
-            self_attribute.value = max(self_attribute.value, other_attribute)
+            self_attribute.value = (
+                _CONFLICT_BEHAVIOR_FUNC[self_attribute.conflict_behavior](
+                    self_attribute.value, other_attribute))
           else:
             self_attribute.value = other_attribute
         elif copying or not self_attribute.conflict_allowed:

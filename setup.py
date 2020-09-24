@@ -15,14 +15,14 @@
 
 """Install script for setuptools."""
 
+from distutils import cmd
+from distutils import log
 import fnmatch
 import os
 import platform
 import subprocess
 import sys
 
-from distutils import cmd
-from distutils import log
 from setuptools import find_packages
 from setuptools import setup
 from setuptools.command import install
@@ -58,14 +58,15 @@ def _initialize_mjbindings_options(cmd_instance):
   """Set default values for options relating to `build_mjbindings`."""
   # A default value must be assigned to each user option here.
   cmd_instance.inplace = 0
-  cmd_instance.headers_dir = os.path.expanduser(DEFAULT_HEADERS_DIR)
+  cmd_instance.headers_dir = DEFAULT_HEADERS_DIR
 
 
 def _finalize_mjbindings_options(cmd_instance):
   """Post-process options relating to `build_mjbindings`."""
+  headers_dir = os.path.expanduser(cmd_instance.headers_dir)
   header_paths = []
   for filename in HEADER_FILENAMES:
-    full_path = os.path.join(cmd_instance.headers_dir, filename)
+    full_path = os.path.join(headers_dir, filename)
     if not os.path.exists(full_path):
       raise IOError('Header file {!r} does not exist.'.format(full_path))
     header_paths.append(full_path)
@@ -152,52 +153,72 @@ class TestCommand(test.test):
     test.test.run(self)
 
 
-def find_data_files(package_dir, patterns):
+def find_data_files(package_dir, patterns, excludes=()):
   """Recursively finds files whose names match the given shell patterns."""
   paths = set()
+
+  def is_excluded(s):
+    for exclude in excludes:
+      if fnmatch.fnmatch(s, exclude):
+        return True
+    return False
+
   for directory, _, filenames in os.walk(package_dir):
+    if is_excluded(directory):
+      continue
     for pattern in patterns:
       for filename in fnmatch.filter(filenames, pattern):
         # NB: paths must be relative to the package directory.
         relative_dirpath = os.path.relpath(directory, package_dir)
-        paths.add(os.path.join(relative_dirpath, filename))
+        full_path = os.path.join(relative_dirpath, filename)
+        if not is_excluded(full_path):
+          paths.add(full_path)
   return list(paths)
 
 setup(
     name='dm_control',
+    version='0.0.327666647',
     description='Continuous control environments and MuJoCo Python bindings.',
     author='DeepMind',
     license='Apache License, Version 2.0',
     keywords='machine learning control physics MuJoCo AI',
+    python_requires='>=3.6, <3.10',
     install_requires=[
         'absl-py>=0.7.0',
-        'enum34; python_version < "3.4"',
         'dm-env',
-        'dm-tree',
+        'dm-tree != 0.1.2',
         'future',
-        'futures; python_version == "2.7"',
         'glfw',
+        'h5py',
+        'labmaze',
         'lxml',
         'numpy',
-        'pyopengl',
+        'protobuf >= 3.12.2',
+        'pyopengl >= 3.1.4',
         'pyparsing',
+        'requests',
         'setuptools',
+        'scipy',
         'six',
+        'tqdm',
     ],
-    extras_require={
-        'locomotion_mazes': ['labmaze'],
-    },
     tests_require=[
         'mock',
         'nose',
         'pillow',
-        'scipy',
     ],
     test_suite='nose.collector',
     packages=find_packages(),
     package_data={
-        'dm_control': find_data_files(package_dir='dm_control',
-                                      patterns=['*.png', '*.stl', '*.xml']),
+        'dm_control':
+            find_data_files(
+                package_dir='dm_control',
+                patterns=['*.amc', '*.msh', '*.png', '*.skn', '*.stl', '*.xml',
+                          '*.textproto', '*.h5'],
+                excludes=[
+                    '*/dog_assets/extras/*',
+                    '*/kinova/meshes/*',  # Exclude non-decimated meshes.
+                ]),
     },
     cmdclass={
         'build_mjbindings': BuildMJBindingsCommand,

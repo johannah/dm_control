@@ -29,6 +29,7 @@ from dm_control.suite import acrobot
 from dm_control.suite import ball_in_cup
 from dm_control.suite import cartpole
 from dm_control.suite import cheetah
+from dm_control.suite import dog
 from dm_control.suite import finger
 from dm_control.suite import fish
 from dm_control.suite import hopper
@@ -55,6 +56,7 @@ def _get_tasks(tag):
   result = []
 
   for domain_name in sorted(_DOMAINS.keys()):
+
     domain = _DOMAINS[domain_name]
 
     if tag is None:
@@ -86,6 +88,8 @@ BENCHMARKING = _get_tasks('benchmarking')
 EASY = _get_tasks('easy')
 HARD = _get_tasks('hard')
 EXTRA = tuple(sorted(set(ALL_TASKS) - set(BENCHMARKING)))
+NO_REWARD_VIZ = _get_tasks('no_reward_visualization')
+REWARD_VIZ = tuple(sorted(set(ALL_TASKS) - set(NO_REWARD_VIZ)))
 
 # A mapping from each domain name to a sequence of its task names.
 TASKS_BY_DOMAIN = _get_tasks_by_domain(ALL_TASKS)

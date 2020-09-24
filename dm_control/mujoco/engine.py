@@ -80,6 +80,11 @@ _INVALID_PHYSICS_STATE = (
     'Physics state is invalid. Warning(s) raised: {warning_names}')
 _OVERLAYS_NOT_SUPPORTED_FOR_DEPTH_OR_SEGMENTATION = (
     'Overlays are not supported with depth or segmentation rendering.')
+_RENDER_FLAG_OVERRIDES_NOT_SUPPORTED_FOR_DEPTH_OR_SEGMENTATION = (
+    '`render_flag_overrides` are not supported for depth or segmentation '
+    'rendering.')
+_KEYFRAME_ID_OUT_OF_RANGE = (
+    '`keyframe_id` must be between 0 and {max_valid} inclusive, got: {actual}.')
 
 
 class Physics(_control.Physics):
@@ -120,7 +125,18 @@ class Physics(_control.Physics):
     Args:
       data: Instance of `wrapper.MjData`.
     """
+    self._warnings_cause_exception = True
     self._reload_from_data(data)
+
+  @contextlib.contextmanager
+  def suppress_physics_errors(self):
+    """Physics warnings will be logged rather than raise exceptions."""
+    prev_state = self._warnings_cause_exception
+    self._warnings_cause_exception = False
+    try:
+      yield
+    finally:
+      self._warnings_cause_exception = prev_state
 
   def enable_profiling(self):
     """Enables Mujoco timing profiling."""
@@ -154,8 +170,17 @@ class Physics(_control.Physics):
 
       mjlib.mj_step1(self.model.ptr, self.data.ptr)
 
-  def render(self, height=240, width=320, camera_id=-1, overlays=(),
-             depth=False, segmentation=False, scene_option=None):
+  def render(
+      self,
+      height=240,
+      width=320,
+      camera_id=-1,
+      overlays=(),
+      depth=False,
+      segmentation=False,
+      scene_option=None,
+      render_flag_overrides=None,
+  ):
     """Returns a camera view as a NumPy array of pixel values.
 
     Args:
@@ -176,6 +201,12 @@ class Physics(_control.Physics):
       scene_option: An optional `wrapper.MjvOption` instance that can be used to
         render the scene with custom visualization options. If None then the
         default options will be used.
+      render_flag_overrides: Optional mapping specifying rendering flags to
+        override. The keys can be either lowercase strings or `mjtRndFlag` enum
+        values, and the values are the overridden flag values, e.g.
+        `{'wireframe': True}` or `{enums.mjtRndFlag.mjRND_WIREFRAME: True}`. See
+        `enums.mjtRndFlag` for the set of valid flags. Must be None if either
+        `depth` or `segmentation` is True.
 
     Returns:
       The rendered RGB, depth or segmentation image.
@@ -184,7 +215,7 @@ class Physics(_control.Physics):
         physics=self, height=height, width=width, camera_id=camera_id)
     image = camera.render(
         overlays=overlays, depth=depth, segmentation=segmentation,
-        scene_option=scene_option)
+        scene_option=scene_option, render_flag_overrides=render_flag_overrides)
     camera._scene.free()  # pylint: disable=protected-access
     return image
 
@@ -239,9 +270,25 @@ class Physics(_control.Physics):
     new_obj._reload_from_data(new_data)  # pylint: disable=protected-access
     return new_obj
 
-  def reset(self):
-    """Resets internal variables of the physics simulation."""
-    mjlib.mj_resetData(self.model.ptr, self.data.ptr)
+  def reset(self, keyframe_id=None):
+    """Resets internal variables of the simulation, possibly to a keyframe.
+
+    Args:
+      keyframe_id: Optional integer specifying the index of a keyframe defined
+        in the model XML to which the simulation state should be initialized.
+        Must be between 0 and `self.model.nkey - 1` (inclusive).
+
+    Raises:
+      ValueError: If `keyframe_id` is out of range.
+    """
+    if keyframe_id is None:
+      mjlib.mj_resetData(self.model.ptr, self.data.ptr)
+    else:
+      if not 0 <= keyframe_id < self.model.nkey:
+        raise ValueError(_KEYFRAME_ID_OUT_OF_RANGE.format(
+            max_valid=self.model.nkey-1, actual=keyframe_id))
+      mjlib.mj_resetDataKeyframe(self.model.ptr, self.data.ptr, keyframe_id)
+
     # Disable actuation since we don't yet have meaningful control inputs.
     with self.model.disable('actuation'):
       self.forward()
@@ -264,15 +311,28 @@ class Physics(_control.Physics):
 
   @contextlib.contextmanager
   def check_invalid_state(self):
-    """Raises a `base.PhysicsError` if the simulation state is invalid."""
+    """Checks whether the physics state is invalid at exit.
+
+    Yields:
+      None
+
+    Raises:
+      PhysicsError: if the simulation state is invalid at exit, unless this
+        context is nested inside a `suppress_physics_errors` context, in which
+        case a warning will be logged instead.
+    """
     # `np.copyto(dst, src)` is marginally faster than `dst[:] = src`.
     np.copyto(self._warnings_before, self._warnings)
     yield
     np.greater(self._warnings, self._warnings_before, out=self._new_warnings)
     if any(self._new_warnings):
       warning_names = np.compress(self._new_warnings, enums.mjtWarning._fields)
-      raise _control.PhysicsError(
-          _INVALID_PHYSICS_STATE.format(warning_names=', '.join(warning_names)))
+      message = _INVALID_PHYSICS_STATE.format(
+          warning_names=', '.join(warning_names))
+      if self._warnings_cause_exception:
+        raise _control.PhysicsError(message)
+      else:
+        logging.warn(message)
 
   def __getstate__(self):
     return self.data  # All state is assumed to reside within `self.data`.
@@ -531,7 +591,7 @@ class Camera(object):
                height=240,
                width=320,
                camera_id=-1,
-               max_geom=1000):
+               max_geom=None):
     """Initializes a new `Camera`.
 
     Args:
@@ -542,8 +602,9 @@ class Camera(object):
         camera, which is always defined. A nonnegative integer or string
         corresponds to a fixed camera, which must be defined in the model XML.
         If `camera_id` is a string then the camera must also be named.
-      max_geom: (optional) An integer specifying the maximum number of geoms
-        that can be represented in the scene.
+      max_geom: Optional integer specifying the maximum number of geoms that can
+        be rendered in the same scene. If None this will be chosen automatically
+        based on the estimated maximum number of renderable geoms in the model.
     Raises:
       ValueError: If `camera_id` is outside the valid range, or if `width` or
         `height` exceed the dimensions of MuJoCo's offscreen framebuffer.
@@ -658,8 +719,14 @@ class Camera(object):
         self._rect,
         self._physics.contexts.mujoco.ptr)
 
-  def render(self, overlays=(), depth=False, segmentation=False,
-             scene_option=None):
+  def render(
+      self,
+      overlays=(),
+      depth=False,
+      segmentation=False,
+      scene_option=None,
+      render_flag_overrides=None,
+  ):
     """Renders the camera view as a numpy array of pixel values.
 
     Args:
@@ -672,6 +739,12 @@ class Camera(object):
         True.
       scene_option: A custom `wrapper.MjvOption` instance to use to render
         the scene instead of the default.  If None, will use the default.
+      render_flag_overrides: Optional mapping containing rendering flags to
+        override. The keys can be either lowercase strings or `mjtRndFlag` enum
+        values, and the values are the overridden flag values, e.g.
+        `{'wireframe': True}` or `{enums.mjtRndFlag.mjRND_WIREFRAME: True}`. See
+        `enums.mjtRndFlag` for the set of valid flags. Must be empty if either
+        `depth` or `segmentation` is True.
 
     Returns:
       The rendered scene.
@@ -686,27 +759,38 @@ class Camera(object):
           (-1, -1).
 
     Raises:
-      ValueError: If overlays are requested with depth rendering.
+      ValueError: If either `overlays` or `render_flag_overrides` is requested
+        when `depth` or `segmentation` rendering is enabled.
       ValueError: If both depth and segmentation flags are set together.
     """
 
     if overlays and (depth or segmentation):
       raise ValueError(_OVERLAYS_NOT_SUPPORTED_FOR_DEPTH_OR_SEGMENTATION)
 
+    if render_flag_overrides and (depth or segmentation):
+      raise ValueError(
+          _RENDER_FLAG_OVERRIDES_NOT_SUPPORTED_FOR_DEPTH_OR_SEGMENTATION)
+
     if depth and segmentation:
       raise ValueError(_BOTH_SEGMENTATION_AND_DEPTH_ENABLED)
 
-    # Enable flags to compute segmentation labels
-    if segmentation:
-      self._scene.flags[enums.mjtRndFlag.mjRND_SEGMENT] = True
-      self._scene.flags[enums.mjtRndFlag.mjRND_IDCOLOR] = True
+    if render_flag_overrides is None:
+      render_flag_overrides = {}
 
     # Update scene geometry.
     self.update(scene_option=scene_option)
 
+    # Enable flags to compute segmentation labels
+    if segmentation:
+      render_flag_overrides.update({
+          enums.mjtRndFlag.mjRND_SEGMENT: True,
+          enums.mjtRndFlag.mjRND_IDCOLOR: True,
+      })
+
     # Render scene and text overlays, read contents of RGB or depth buffer.
-    with self._physics.contexts.gl.make_current() as ctx:
-      ctx.call(self._render_on_gl_thread, depth=depth, overlays=overlays)
+    with self.scene.override_flags(render_flag_overrides):
+      with self._physics.contexts.gl.make_current() as ctx:
+        ctx.call(self._render_on_gl_thread, depth=depth, overlays=overlays)
 
     if depth:
       # Get the distances to the near and far clipping planes.

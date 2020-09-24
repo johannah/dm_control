@@ -15,3 +15,4 @@
 """Props for Locomotion tasks."""
 
 from dm_control.locomotion.props.target_sphere import TargetSphere
+from dm_control.locomotion.props.target_sphere import TargetSphereTwoTouch

@@ -27,6 +27,7 @@ from absl.testing import parameterized
 from dm_control import composer
 from dm_control import mjcf
 from dm_control.locomotion import soccer
+from dm_control.locomotion.soccer import camera
 from dm_control.locomotion.soccer import initializers
 from dm_control.mujoco.wrapper import mjbindings
 import numpy as np
@@ -97,14 +98,14 @@ class TaskTest(parameterized.TestCase):
       self.assertCountEqual(first, other)
 
   @parameterized.named_parameters(
-      ("1vs1_core", 1, "core", 32, True),
-      ("2vs2_core", 2, "core", 40, True),
-      ("1vs1_interception", 1, "core_interception", 40, True),
-      ("2vs2_interception", 2, "core_interception", 48, True),
-      ("1vs1_core_contact", 1, "core", 32, False),
-      ("2vs2_core_contact", 2, "core", 40, False),
-      ("1vs1_interception_contact", 1, "core_interception", 40, False),
-      ("2vs2_interception_contact", 2, "core_interception", 48, False),
+      ("1vs1_core", 1, "core", 33, True),
+      ("2vs2_core", 2, "core", 43, True),
+      ("1vs1_interception", 1, "core_interception", 41, True),
+      ("2vs2_interception", 2, "core_interception", 51, True),
+      ("1vs1_core_contact", 1, "core", 33, False),
+      ("2vs2_core_contact", 2, "core", 43, False),
+      ("1vs1_interception_contact", 1, "core_interception", 41, False),
+      ("2vs2_interception_contact", 2, "core_interception", 51, False),
   )
   def test_step_environment(self, team_size, observables_adder, num_obs,
                             disable_walker_contacts):
@@ -130,11 +131,11 @@ class TaskTest(parameterized.TestCase):
 
   # TODO(b/124848293): consolidate environment stepping loop for task tests.
   @parameterized.named_parameters(
-      ("1vs2", 1, 2, 36),
-      ("2vs1", 2, 1, 36),
-      ("3vs0", 3, 0, 36),
-      ("0vs2", 0, 2, 32),
-      ("2vs2", 2, 2, 40),
+      ("1vs2", 1, 2, 38),
+      ("2vs1", 2, 1, 38),
+      ("3vs0", 3, 0, 38),
+      ("0vs2", 0, 2, 33),
+      ("2vs2", 2, 2, 43),
       ("0vs0", 0, 0, None),
   )
   def test_num_players(self, home_size, away_size, num_observations):
@@ -423,6 +424,31 @@ class TaskTest(parameterized.TestCase):
       timestep = env.step(actions)
 
     self.assertEqual(timestep.discount, expected_terminal_discount)
+
+  @parameterized.named_parameters(("reset_only", False), ("step", True))
+  def test_render(self, take_step):
+    height = 100
+    width = 150
+    tracking_cameras = []
+    for min_distance in [1, 1, 2]:
+      tracking_cameras.append(
+          camera.MultiplayerTrackingCamera(
+              min_distance=min_distance,
+              distance_factor=1,
+              smoothing_update_speed=0.1,
+              width=width,
+              height=height,
+          ))
+    env = _env(_home_team(1) + _away_team(1), tracking_cameras=tracking_cameras)
+    env.reset()
+    if take_step:
+      actions = [np.zeros(s.shape, s.dtype) for s in env.action_spec()]
+      env.step(actions)
+    rendered_frames = [cam.render() for cam in tracking_cameras]
+    for frame in rendered_frames:
+      assert frame.shape == (height, width, 3)
+    self.assertTrue(np.array_equal(rendered_frames[0], rendered_frames[1]))
+    self.assertFalse(np.array_equal(rendered_frames[1], rendered_frames[2]))
 
 
 class UniformInitializerTest(parameterized.TestCase):

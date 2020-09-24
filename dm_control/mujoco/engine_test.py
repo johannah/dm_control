@@ -246,6 +246,29 @@ class MujocoEngineTest(parameterized.TestCase):
         ValueError, engine._BOTH_SEGMENTATION_AND_DEPTH_ENABLED):
       self._physics.render(depth=True, segmentation=True)
 
+  def testRenderFlagOverridesAreNotPersistent(self):
+    camera = engine.Camera(self._physics)
+    first_rgb = camera.render().copy()
+    camera.render(segmentation=True)
+    second_rgb = camera.render().copy()
+    np.testing.assert_array_equal(first_rgb, second_rgb)
+
+  def testCustomRenderFlags(self):
+    default = self._physics.render()
+    wireframe_string_key = self._physics.render(
+        render_flag_overrides=dict(wireframe=True))
+    self.assertFalse((default == wireframe_string_key).all())
+    wireframe_enum_key = self._physics.render(
+        render_flag_overrides={enums.mjtRndFlag.mjRND_WIREFRAME: True})
+    np.testing.assert_array_equal(wireframe_string_key, wireframe_enum_key)
+
+  @parameterized.parameters(dict(depth=True), dict(segmentation=True))
+  def testExceptionIfRenderFlagOverridesAndDepthOrSegmentation(self, **kwargs):
+    with self.assertRaisesWithLiteralMatch(
+        ValueError,
+        engine._RENDER_FLAG_OVERRIDES_NOT_SUPPORTED_FOR_DEPTH_OR_SEGMENTATION):
+      self._physics.render(render_flag_overrides=dict(wireframe=True), **kwargs)
+
   def testExceptionIfOverlaysAndDepthOrSegmentation(self):
     overlay = engine.TextOverlay()
     with self.assertRaisesWithLiteralMatch(
@@ -287,6 +310,22 @@ class MujocoEngineTest(parameterized.TestCase):
 
   def testReload(self):
     self._physics.reload_from_xml_path(MODEL_PATH)
+
+  def testReset(self):
+    self._physics.reset()
+    self.assertEqual(self._physics.data.qpos[1], 0)
+    keyframe_id = 0
+    self._physics.reset(keyframe_id=keyframe_id)
+    self.assertEqual(self._physics.data.qpos[1],
+                     self._physics.model.key_qpos[keyframe_id, 1])
+    out_of_range = [-1, 3]
+    max_valid = self._physics.model.nkey - 1
+    for actual in out_of_range:
+      with self.assertRaisesWithLiteralMatch(
+          ValueError,
+          engine._KEYFRAME_ID_OUT_OF_RANGE.format(
+              max_valid=max_valid, actual=actual)):
+        self._physics.reset(keyframe_id=actual)
 
   def testLoadAndReloadFromStringWithAssets(self):
     physics = engine.Physics.from_xml_string(
@@ -345,6 +384,30 @@ class MujocoEngineTest(parameterized.TestCase):
       with self._physics.check_invalid_state():
         self._physics.data.ctrl[0] = float('nan')
         self._physics.step()
+
+  def testSuppressPhysicsError(self):
+    bad_value = float('nan')
+    message = engine._INVALID_PHYSICS_STATE.format(
+        warning_names='mjWARN_BADCTRL')
+
+    def assert_physics_error():
+      self._physics.data.ctrl[0] = bad_value
+      with self.assertRaisesWithLiteralMatch(control.PhysicsError, message):
+        self._physics.forward()
+
+    def assert_warning():
+      self._physics.data.ctrl[0] = bad_value
+      with mock.patch.object(engine.logging, 'warn') as mock_warn:
+        self._physics.forward()
+      mock_warn.assert_called_once_with(message)
+
+    assert_physics_error()
+    with self._physics.suppress_physics_errors():
+      assert_warning()
+      with self._physics.suppress_physics_errors():
+        assert_warning()
+      assert_warning()
+    assert_physics_error()
 
   @parameterized.named_parameters(
       ('_copy', lambda x: x.copy()),

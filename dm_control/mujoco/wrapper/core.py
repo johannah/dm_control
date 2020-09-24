@@ -33,7 +33,7 @@ from dm_control.mujoco.wrapper.mjbindings import functions
 from dm_control.mujoco.wrapper.mjbindings import mjlib
 from dm_control.mujoco.wrapper.mjbindings import types
 from dm_control.mujoco.wrapper.mjbindings import wrappers
-
+import numpy as np
 import six
 
 # Internal analytics import.
@@ -51,6 +51,10 @@ _VFS_FILENAME_TOO_LONG = (
     "Filename length {length} exceeds {limit} character limit: {filename}")
 _INVALID_FONT_SCALE = ("`font_scale` must be one of {}, got {{}}."
                        .format(enums.mjtFontScale))
+
+_CONTACT_ID_OUT_OF_RANGE = (
+    "`contact_id` must be between 0 and {max_valid} (inclusive), got: {actual}."
+)
 
 # Global cache used to store finalizers for freeing ctypes pointers.
 # Contains {pointer_address: weakref_object} pairs.
@@ -687,6 +691,54 @@ class MjData(wrappers.MjDataWrapper):
     _finalize(self._ptr)
     del self._ptr
 
+  def object_velocity(self, object_id, object_type, local_frame=False):
+    """Returns the 6D velocity (linear, angular) of a MuJoCo object.
+
+    Args:
+      object_id: Object identifier. Can be either integer ID or String name.
+      object_type: The type of the object. Can be either a lowercase string
+        (e.g. 'body', 'geom') or an `mjtObj` enum value.
+      local_frame: Boolean specifiying whether the velocity is given in the
+        global (worldbody), or local (object) frame.
+
+    Returns:
+      2x3 array with stacked (linear_velocity, angular_velocity)
+
+    Raises:
+      Error: If `object_type` is not a valid MuJoCo object type, or if no object
+        with the corresponding name and type was found.
+    """
+    if not isinstance(object_type, int):
+      object_type = _str2type(object_type)
+    velocity = np.empty(6, dtype=np.float64)
+    if not isinstance(object_id, int):
+      object_id = self.model.name2id(object_id, object_type)
+    mjlib.mj_objectVelocity(self.model.ptr, self.ptr,
+                            object_type, object_id, velocity, local_frame)
+    #  MuJoCo returns velocities in (angular, linear) order, which we flip here.
+    return velocity.reshape(2, 3)[::-1]
+
+  def contact_force(self, contact_id):
+    """Returns the wrench of a contact as a 2 x 3 array of (forces, torques).
+
+    Args:
+      contact_id: Integer, the index of the contact within the contact buffer
+        (`self.contact`).
+
+    Returns:
+      2x3 array with stacked (force, torque). Note that the order of dimensions
+        is (normal, tangent, tangent), in the contact's frame.
+
+    Raises:
+      ValueError: If `contact_id` is negative or bigger than ncon-1.
+    """
+    if not 0 <= contact_id < self.ncon:
+      raise ValueError(_CONTACT_ID_OUT_OF_RANGE
+                       .format(max_valid=self.ncon-1, actual=contact_id))
+    wrench = np.empty(6, dtype=np.float64)
+    mjlib.mj_contactForce(self.model.ptr, self.ptr, contact_id, wrench)
+    return wrench.reshape(2, 3)
+
   @property
   def model(self):
     """The parent MjModel for this MjData instance."""
@@ -790,18 +842,55 @@ class MjrContext(wrappers.MjrContextWrapper):  # pylint: disable=missing-docstri
     del self._ptr
 
 
+# A mapping from human-readable short names to mjtRndFlag enum values, i.e.
+# {'shadow': mjtRndFlag.mjRND_SHADOW, 'fog': mjtRndFlag.mjRND_FOG, ...}
+_NAME_TO_RENDER_FLAG_ENUM_VALUE = {
+    name[len("mjRND_"):].lower(): getattr(enums.mjtRndFlag, name)
+    for name in enums.mjtRndFlag._fields[:-1]  # Exclude mjRND_NUMRNDFLAG entry.
+}
+
+
+def _estimate_max_renderable_geoms(model):
+  """Estimates the maximum number of renderable geoms for a given model."""
+  # Only one type of object frame can be rendered at once.
+  max_nframes = max(
+      [model.nbody, model.ngeom, model.nsite, model.ncam, model.nlight])
+  # This is probably an underestimate, but it is unlikely that all possible
+  # rendering options will be enabled simultaneously, or that all renderable
+  # geoms will be present within the viewing frustum at the same time.
+  return (
+      3 * max_nframes +  # 1 geom per axis for each frame.
+      4 * model.ngeom +  # geom itself + contacts + 2 * split contact forces.
+      3 * model.nbody +  # COM + inertia box + perturbation force.
+      model.nsite +
+      model.ntendon +
+      model.njnt +
+      model.nu +
+      model.nskin +
+      model.ncam +
+      model.nlight)
+
+
 class MjvScene(wrappers.MjvSceneWrapper):  # pylint: disable=missing-docstring
 
-  def __init__(self, model=None, max_geom=1000):
+  def __init__(self, model=None, max_geom=None):
     """Initializes a new `MjvScene` instance.
 
     Args:
       model: (optional) An `MjModel` instance.
       max_geom: (optional) An integer specifying the maximum number of geoms
-        that can be represented in the scene.
+        that can be represented in the scene. If None, this will be chosen
+        automatically based on `model`.
     """
     model_ptr = model.ptr if model is not None else None
     scene_ptr = ctypes.pointer(types.MJVSCENE())
+
+    if max_geom is None:
+      if model is None:
+        max_renderable_geoms = 0
+      else:
+        max_renderable_geoms = _estimate_max_renderable_geoms(model)
+      max_geom = max(1000, max_renderable_geoms)
 
     # Allocate and initialize resources for the abstract scene.
     mjlib.mjv_makeScene(model_ptr, scene_ptr, max_geom)
@@ -810,6 +899,32 @@ class MjvScene(wrappers.MjvSceneWrapper):  # pylint: disable=missing-docstring
     _create_finalizer(scene_ptr, mjlib.mjv_freeScene)
 
     super(MjvScene, self).__init__(scene_ptr)
+
+  @contextlib.contextmanager
+  def override_flags(self, overrides):
+    """Context manager for temporarily overriding rendering flags.
+
+    Args:
+      overrides: A mapping specifying rendering flags to override. The keys can
+        be either lowercase strings or `mjtRndFlag` enum values, and the values
+        are the overridden flag values, e.g. `{'wireframe': True}` or
+        `{enums.mjtRndFlag.mjRND_WIREFRAME: True}`. See `enums.mjtRndFlag` for
+        the set of valid flags.
+
+    Yields:
+      None
+    """
+    if not overrides:
+      yield
+    else:
+      original_flags = self.flags.copy()
+      for key, value in overrides.items():
+        index = _NAME_TO_RENDER_FLAG_ENUM_VALUE.get(key, key)
+        self.flags[index] = value
+      try:
+        yield
+      finally:
+        np.copyto(self.flags, original_flags)
 
   def free(self):
     """Frees the native resources held by this MjvScene.

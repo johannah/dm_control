@@ -166,6 +166,8 @@ class NullGoalMaze(composer.Task):
     if self._randomize_spawn_position:
       self._spawn_position = self._maze_arena.spawn_positions[
           random_state.randint(0, len(self._maze_arena.spawn_positions))]
+    else:
+      self._spawn_position = self._maze_arena.spawn_positions[0]
 
     if self._randomize_spawn_rotation:
       # Move walker up out of the way before raycasting.
@@ -254,13 +256,14 @@ class RepeatSingleGoalMaze(NullGoalMaze):
   def __init__(self,
                walker,
                maze_arena,
-               target=target_sphere.TargetSphere(),
+               target=None,
                target_reward_scale=1.0,
                randomize_spawn_position=True,
                randomize_spawn_rotation=True,
                rotation_bias_factor=0,
                aliveness_reward=0.0,
                aliveness_threshold=DEFAULT_ALIVE_THRESHOLD,
+               contact_termination=True,
                max_repeats=0,
                enable_global_task_observables=False,
                physics_timestep=DEFAULT_PHYSICS_TIMESTEP,
@@ -273,9 +276,12 @@ class RepeatSingleGoalMaze(NullGoalMaze):
         rotation_bias_factor=rotation_bias_factor,
         aliveness_reward=aliveness_reward,
         aliveness_threshold=aliveness_threshold,
+        contact_termination=contact_termination,
         enable_global_task_observables=enable_global_task_observables,
         physics_timestep=physics_timestep,
         control_timestep=control_timestep)
+    if target is None:
+      target = target_sphere.TargetSphere()
     self._target = target
     self._rewarded_this_step = False
     self._maze_arena.attach(target)
@@ -347,6 +353,7 @@ class ManyHeterogeneousGoalsMaze(NullGoalMaze):
                rotation_bias_factor=0,
                aliveness_reward=0.0,
                aliveness_threshold=DEFAULT_ALIVE_THRESHOLD,
+               contact_termination=True,
                physics_timestep=DEFAULT_PHYSICS_TIMESTEP,
                control_timestep=DEFAULT_CONTROL_TIMESTEP):
     super(ManyHeterogeneousGoalsMaze, self).__init__(
@@ -357,6 +364,7 @@ class ManyHeterogeneousGoalsMaze(NullGoalMaze):
         rotation_bias_factor=rotation_bias_factor,
         aliveness_reward=aliveness_reward,
         aliveness_threshold=aliveness_threshold,
+        contact_termination=contact_termination,
         physics_timestep=physics_timestep,
         control_timestep=control_timestep)
     self._active_targets = []
@@ -449,6 +457,7 @@ class ManyGoalsMaze(ManyHeterogeneousGoalsMaze):
                rotation_bias_factor=0,
                aliveness_reward=0.0,
                aliveness_threshold=DEFAULT_ALIVE_THRESHOLD,
+               contact_termination=True,
                physics_timestep=DEFAULT_PHYSICS_TIMESTEP,
                control_timestep=DEFAULT_CONTROL_TIMESTEP):
     super(ManyGoalsMaze, self).__init__(
@@ -462,6 +471,7 @@ class ManyGoalsMaze(ManyHeterogeneousGoalsMaze):
         rotation_bias_factor=rotation_bias_factor,
         aliveness_reward=aliveness_reward,
         aliveness_threshold=aliveness_threshold,
+        contact_termination=contact_termination,
         physics_timestep=physics_timestep,
         control_timestep=control_timestep)
 
@@ -482,6 +492,7 @@ class RepeatSingleGoalMazeAugmentedWithTargets(RepeatSingleGoalMaze):
                rotation_bias_factor=0,
                aliveness_reward=0.0,
                aliveness_threshold=DEFAULT_ALIVE_THRESHOLD,
+               contact_termination=True,
                physics_timestep=DEFAULT_PHYSICS_TIMESTEP,
                control_timestep=DEFAULT_CONTROL_TIMESTEP):
     super(RepeatSingleGoalMazeAugmentedWithTargets, self).__init__(
@@ -494,6 +505,7 @@ class RepeatSingleGoalMazeAugmentedWithTargets(RepeatSingleGoalMaze):
         rotation_bias_factor=rotation_bias_factor,
         aliveness_reward=aliveness_reward,
         aliveness_threshold=aliveness_threshold,
+        contact_termination=contact_termination,
         physics_timestep=physics_timestep,
         control_timestep=control_timestep)
     self._subtarget_reward_scale = subtarget_reward_scale

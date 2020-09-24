@@ -23,7 +23,8 @@ import os
 
 from dm_control import composer
 from dm_control import mjcf
-from dm_control.locomotion.walkers import base
+from dm_control.composer.observation import observable
+from dm_control.locomotion.walkers import legacy_base
 import numpy as np
 from PIL import Image
 import six
@@ -102,13 +103,65 @@ def _asset_png_with_background_rgba_bytes(asset_fname, background_rgba):
   return png_encoding
 
 
-class BoxHead(base.Walker):
+class BoxHeadObservables(legacy_base.WalkerObservables):
+  """BoxHead observables with low-res camera and modulo'd rotational joints."""
+
+  def __init__(self, entity, camera_resolution):
+    self._camera_resolution = camera_resolution
+    super(BoxHeadObservables, self).__init__(entity)
+
+  @composer.observable
+  def egocentric_camera(self):
+    width, height = self._camera_resolution
+    return observable.MJCFCamera(self._entity.egocentric_camera,
+                                 width=width, height=height)
+
+  @property
+  def proprioception(self):
+    proprioception = super(BoxHeadObservables, self).proprioception
+    if self._entity.observable_camera_joints:
+      return proprioception + [self.camera_joints_pos, self.camera_joints_vel]
+    return proprioception
+
+  @composer.observable
+  def camera_joints_pos(self):
+
+    def _sin(value, random_state):
+      del random_state
+      return np.sin(value)
+
+    def _cos(value, random_state):
+      del random_state
+      return np.cos(value)
+
+    sin_rotation_joints = observable.MJCFFeature(
+        'qpos', self._entity.observable_camera_joints, corruptor=_sin)
+
+    cos_rotation_joints = observable.MJCFFeature(
+        'qpos', self._entity.observable_camera_joints, corruptor=_cos)
+
+    def _camera_joints(physics):
+      return np.concatenate([
+          sin_rotation_joints(physics),
+          cos_rotation_joints(physics)
+      ], -1)
+
+    return observable.Generic(_camera_joints)
+
+  @composer.observable
+  def camera_joints_vel(self):
+    return observable.MJCFFeature(
+        'qvel', self._entity.observable_camera_joints)
+
+
+class BoxHead(legacy_base.Walker):
   """A rollable and jumpable ball with a head."""
 
   def _build(self,
              name='walker',
              marker_rgba=None,
              camera_control=False,
+             camera_resolution=(28, 28),
              roll_gear=-60,
              steer_gear=55,
              walker_id=None,
@@ -121,6 +174,7 @@ class BoxHead(base.Walker):
         walkers (in multi-agent setting).
       camera_control: If `True`, the walker exposes two additional actuated
         degrees of freedom to control the egocentric camera height and tilt.
+      camera_resolution: egocentric camera rendering resolution.
       roll_gear: gear determining forward acceleration.
       steer_gear: gear determining steering (spinning) torque.
       walker_id: (Optional) An integer in [0-10], this number will be shown on
@@ -176,8 +230,9 @@ class BoxHead(base.Walker):
 
     self._root_joints = None
     self._camera_control = camera_control
+    self._camera_resolution = camera_resolution
     if not camera_control:
-      for name in ('camera_height', 'camera_tilt'):
+      for name in ('camera_pitch', 'camera_yaw'):
         self._mjcf_root.find('actuator', name).remove()
         self._mjcf_root.find('joint', name).remove()
     self._roll_gear = roll_gear
@@ -189,11 +244,16 @@ class BoxHead(base.Walker):
     self._prev_action = np.zeros(shape=self.action_spec.shape,
                                  dtype=self.action_spec.dtype)
 
+  def _build_observables(self):
+    return BoxHeadObservables(self, camera_resolution=self._camera_resolution)
+
   @property
   def marker_geoms(self):
     geoms = [
         self._mjcf_root.find('geom', 'arm_l'),
-        self._mjcf_root.find('geom', 'arm_r')
+        self._mjcf_root.find('geom', 'arm_r'),
+        self._mjcf_root.find('geom', 'eye_l'),
+        self._mjcf_root.find('geom', 'eye_r'),
     ]
     if self._walker_id is None:
       geoms.append(self._mjcf_root.find('geom', 'head'))
@@ -224,7 +284,22 @@ class BoxHead(base.Walker):
           1 - 2 * (quaternion[2] ** 2 + quaternion[3] ** 2))
       physics.bind(self._mjcf_root.find('joint', 'steer')).qpos = z_angle
 
-  def initialize_episode(self, physics, unused_random_state):
+  def set_velocity(self, physics, velocity=None, angular_velocity=None):
+    if velocity is not None:
+      if self._root_joints is not None:
+        physics.bind(self._root_joints).qvel = velocity
+
+    if angular_velocity is not None:
+      # This walker can only rotate along the z-axis, so we extract only that
+      # component from the angular_velocity.
+      steer_joint = self._mjcf_root.find('joint', 'steer')
+      if isinstance(angular_velocity, float):
+        z_velocity = angular_velocity
+      else:
+        z_velocity = angular_velocity[2]
+      physics.bind(steer_joint).qvel = z_velocity
+
+  def initialize_episode(self, physics, random_state):
     if self._camera_control:
       _compensate_gravity(physics,
                           self._mjcf_root.find('body', 'egocentric_camera'))
@@ -256,6 +331,15 @@ class BoxHead(base.Walker):
   @composer.cached_property
   def observable_joints(self):
     return (self._mjcf_root.find('joint', 'kick'),)
+
+  @composer.cached_property
+  def observable_camera_joints(self):
+    if self._camera_control:
+      return (
+          self._mjcf_root.find('joint', 'camera_yaw'),
+          self._mjcf_root.find('joint', 'camera_pitch'),
+      )
+    return ()
 
   @composer.cached_property
   def egocentric_camera(self):

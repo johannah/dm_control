@@ -23,6 +23,7 @@ from __future__ import print_function
 from absl.testing import absltest
 from absl.testing import parameterized
 from dm_control.locomotion.examples import basic_cmu_2019
+from dm_control.locomotion.examples import basic_rodent_2020
 
 import numpy as np
 from six.moves import range
@@ -52,7 +53,14 @@ class ExampleEnvironmentsTest(parameterized.TestCase):
       ('cmu_humanoid_run_walls', basic_cmu_2019.cmu_humanoid_run_walls),
       ('cmu_humanoid_run_gaps', basic_cmu_2019.cmu_humanoid_run_gaps),
       ('cmu_humanoid_go_to_target', basic_cmu_2019.cmu_humanoid_go_to_target),
-      ('cmu_humanoid_maze_forage', basic_cmu_2019.cmu_humanoid_maze_forage),)
+      ('cmu_humanoid_maze_forage', basic_cmu_2019.cmu_humanoid_maze_forage),
+      ('cmu_humanoid_heterogeneous_forage',
+       basic_cmu_2019.cmu_humanoid_heterogeneous_forage),
+      ('rodent_escape_bowl', basic_rodent_2020.rodent_escape_bowl),
+      ('rodent_run_gaps', basic_rodent_2020.rodent_run_gaps),
+      ('rodent_maze_forage', basic_rodent_2020.rodent_maze_forage),
+      ('rodent_two_touch', basic_rodent_2020.rodent_two_touch),
+  )
   def test_env_runs(self, env_constructor):
     """Tests that the environment runs and is coherent with its specs."""
     random_state = np.random.RandomState(99)

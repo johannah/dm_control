@@ -17,7 +17,7 @@ from dm_control import robot
 from IPython import embed
 from copy import deepcopy
 import numpy as np
-
+import time 
 # the kinova jaco2 ros exposes the joint state at ~52Hz
 # CONTROL_TIMESTEP should be long enough that position controller can also reach the destination in mujoco if it is reacher. Tested with .1 CONTROL_TIMESTEP and .1 maximum relative deg step in 7DOF jaco for position controllers (with tuned gain).
 _CONTROL_TIMESTEP = .1
@@ -278,41 +278,42 @@ def configurable_reacher(xml_name='jaco_j2s7s300_position.xml',
             **environment_kwargs)
   
     return env
-def _find_joint_coordinate_extremes(major_joint_angles):  
-    """calculate xyz positions for joints form cartesian extremes
-    major_joint_angles: ordered list of joint angles in radians (len 7 for 7DOF arm)"""
-    """ July 2020 - 
-    JRH sanity checked these values by setting the real 7DOF Jaco 2 robot to the "home position" 
-    and measured the physical robot against the DH calculations of extreme joints.
-    In this function, we care about the elbow (joint 4), wrist, (joint6) and tool pose (fingertips)
 
-    home_joint_angles = np.array([4.92,    # 283 deg
-                                  2.839,   # 162.709854126
-                                  0.,       # 0 
-                                  .758,    # 43.43
-                                  4.6366,  # 265.66
-                                  4.493,   # 257.47
-                                  5.0249,  # 287.9
-    
-    Unfortunately, I only have an Imperial tape measure, so converting to inches first:
-    ---
-    index   xm         ym       zm      xin       yin       zin        measured_description
-    6       -.304     -.149     .504    -11.9685  -5.866    19.685     finger tips!  this is appropriate to use for tool pose
-    5       -.04      -.144     .515    1.57      5.66      20.27      middle of joint 6 starting with 1 joint indexing
-    3       .016      .122      .667    .629      4.8       26.25      joint 4 starting with 1 joint indexing
-    """
-    extreme_xyz = []
-    major_joint_angles = major_joint_angles[:len(DH_theta_sign)]
-    # transform first!
-    Tall = np.array([[1,0,0,0],[0,-1,0,0],[0,0,-1,0],[0,0,0,1]], dtype=np.float)
-    for i, angle in enumerate(major_joint_angles):
-        DH_theta = DH_theta_sign[i]*angle + DH_theta_offset[i]
-        T = DHtransformEL(DH_d[i], DH_theta, DH_a[i], DH_alpha[i])
-        Tall = np.dot(Tall, T)
-        #if i+1 in extreme_joints:
-        extreme_xyz.append([Tall[0,3], Tall[1,3], Tall[2,3]])
-    extremes = np.array(extreme_xyz)
-    return extremes
+#def _find_joint_coordinate_extremes(major_joint_angles):  
+#    """calculate xyz positions for joints form cartesian extremes
+#    major_joint_angles: ordered list of joint angles in radians (len 7 for 7DOF arm)"""
+#    """ July 2020 - 
+#    JRH sanity checked these values by setting the real 7DOF Jaco 2 robot to the "home position" 
+#    and measured the physical robot against the DH calculations of extreme joints.
+#    In this function, we care about the elbow (joint 4), wrist, (joint6) and tool pose (fingertips)
+#
+#    home_joint_angles = np.array([4.92,    # 283 deg
+#                                  2.839,   # 162.709854126
+#                                  0.,       # 0 
+#                                  .758,    # 43.43
+#                                  4.6366,  # 265.66
+#                                  4.493,   # 257.47
+#                                  5.0249,  # 287.9
+#    
+#    Unfortunately, I only have an Imperial tape measure, so converting to inches first:
+#    ---
+#    index   xm         ym       zm      xin       yin       zin        measured_description
+#    6       -.304     -.149     .504    -11.9685  -5.866    19.685     finger tips!  this is appropriate to use for tool pose
+#    5       -.04      -.144     .515    1.57      5.66      20.27      middle of joint 6 starting with 1 joint indexing
+#    3       .016      .122      .667    .629      4.8       26.25      joint 4 starting with 1 joint indexing
+#    """
+#    extreme_xyz = []
+#    major_joint_angles = major_joint_angles[:len(DH_theta_sign)]
+#    # transform first!
+#    Tall = np.array([[1,0,0,0],[0,-1,0,0],[0,0,-1,0],[0,0,0,1]], dtype=np.float)
+#    for i, angle in enumerate(major_joint_angles):
+#        DH_theta = DH_theta_sign[i]*angle + DH_theta_offset[i]
+#        T = DHtransformEL(DH_d[i], DH_theta, DH_a[i], DH_alpha[i])
+#        Tall = np.dot(Tall, T)
+#        #if i+1 in extreme_joints:
+#        extreme_xyz.append([Tall[0,3], Tall[1,3], Tall[2,3]])
+#    extremes = np.array(extreme_xyz)
+#    return extremes
 
 
 class MujocoPhysics(mujoco.Physics):
@@ -331,7 +332,15 @@ class MujocoPhysics(mujoco.Physics):
         if hand_type == 's3':
             self.n_hand_actuators = 6 
         self.n_actuators = self.n_major_actuators + self.n_hand_actuators
+        # TODO - get names automatically - need to exclude base / objects in scene
+        self.body_parts = ['b_1', 'b_2', 'b_3', 'b_4', 'b_5', 'b_6', 'b_7', 
+                           'b_finger_1', 'b_finger_tip_1', 
+                           'b_finger_2', 'b_finger_tip_2', 
+                           'b_finger_3', 'b_finger_tip_3']
 
+        self.body_ids = [self.model.name2id(bp, 'body') for bp in self.body_parts]
+        # TODO might want to expand in future - this will only detect body 2 body collisions
+        self.specific_collision_geom_ids = self.body_ids
         # only position tested
         self.control_type = control_type
         self.fence = fence
@@ -351,24 +360,14 @@ class MujocoPhysics(mujoco.Physics):
             raise NotImplementedError; sys.exit()
 
     def step_to_position(self):
-        safe_step = True
         control_angles = self.data.ctrl[:self.n_major_actuators]
-        joint_extremes = _find_joint_coordinate_extremes(control_angles)
-        for xx,joint_xyz in enumerate(joint_extremes):
-            good_xyz, hit = trim_and_check_pose_safety(joint_xyz, self.fence)
-            if hit:
-                print('{} DH:{} {} will hit at {} at requested joint position - blocking action'.format(self.type, xx, joint_xyz, good_xyz))
-                safe_step = False
- 
-        if safe_step:
-            cnt = 1
+        super(MujocoPhysics, self).step()
+        error = np.sum((control_angles - self.named.data.qpos.copy()[:self.n_major_actuators])**2)
+        cnt = 0
+        while cnt < self.sub_step_limit and error > self.error_step_complete:
             super(MujocoPhysics, self).step()
             error = np.sum((control_angles - self.named.data.qpos.copy()[:self.n_major_actuators])**2)
-            while cnt < self.sub_step_limit and error > self.error_step_complete:
-                super(MujocoPhysics, self).step()
-                error = np.sum((control_angles - self.named.data.qpos.copy()[:self.n_major_actuators])**2)
-                #print('step', cnt, error)
-                cnt += 1
+            cnt += 1
              
     def set_position_of_target(self, target_position, target_size):
         self.named.model.geom_size['target', 0] = target_size
@@ -411,15 +410,15 @@ class RobotPhysics(robot.Physics):
     def step(self):
         safe_step = True
         joint_angles = self.data[:self.n_major_actuators]
-        joint_extremes = _find_joint_coordinate_extremes(joint_angles)
-        for xx,joint_xyz in enumerate(joint_extremes):
-            good_xyz, hit = trim_and_check_pose_safety(joint_xyz, self.fence)
-            if hit:
-                #print('{} DH:{} {} will hit at {} at requested joint position - blocking action'.format(self.type, xx, joint_extremes[xx], good_xyz))
-                safe_step = False
+        #joint_extremes = _find_joint_coordinate_extremes(joint_angles)
+        #for xx,joint_xyz in enumerate(joint_extremes):
+        #    good_xyz, hit = trim_and_check_pose_safety(joint_xyz, self.fence)
+        #    if hit:
+        #        #print('{} DH:{} {} will hit at {} at requested joint position - blocking action'.format(self.type, xx, joint_extremes[xx], good_xyz))
+        #        safe_step = False
  
-        if safe_step:
-            super(RobotPhysics, self).step()
+        #if safe_step:
+        super(RobotPhysics, self).step()
  
     def set_position_of_target(self, target_position, target_size):
         self.target_position = target_position
@@ -473,10 +472,11 @@ class Jaco(base.Task):
           random: Optional,  an integer seed for creating a new `RandomState`, or None to select a seed
             automatically (default).
         """
-        self.safe_step = False
         self.safety_physics = safety_physics
         self.target_type = target_type
         self.fixed_target_position = self.target_position = np.array(fixed_target_position)
+        self.max_target_distance_from_tool = 1.0
+        self.max_target_distance_from_base = 1.0 # dont extend past arm distance
         self.relative_step = relative_step
         self.relative_rad_max = relative_rad_max
         self.DOF = degrees_of_freedom
@@ -493,7 +493,6 @@ class Jaco(base.Task):
         self.start_position = start_position
         self.random_state = np.random.RandomState(random)
         self._fully_observable = fully_observable
-        self.hit_penalty = 0.0
         # TODO are open/close opposite on robot??
         self.opened_hand_position = np.zeros(6)
         self.closed_hand_position = np.array([1.1,0.1,1.1,0.1,1.1,0.1])
@@ -574,35 +573,9 @@ class Jaco(base.Task):
             raise NotImplementedError
         return angles
 
-    def check_for_self_collisions(self, joint_angles):
-        # Check for collisions. This doesnt work!
-        self.safety_physics.set_joint_angles(joint_angles)
-        self.safety_physics.after_reset()
-        penetrating = self.safety_physics.data.ncon > 0
-        return penetrating
-        #print('penetrating', penetrating) 
-        #if penetrating:
-            # TODO we only care if target / table are hitting
-            #names = self.safety_physics.named.data.xpos.axes.row.names
-            #contacts_1 = self.safety_physics.data.contact.geom1
-            #contacts_2 = self.safety_physics.data.contact.geom2
-            ##contact_text = ['{} collides with {}'.format(names[x1], names[x2]) for x1, x2 in zip(contacts_1, contacts_2)]
-            #  
-            #contact_text = []
-            ##for (x1, x2) in zip(contacts_1, contacts_2):
-            ##    contact_text.append('{} collides with {}'.format(names[x1], names[x2]))
-
-            #embed()
-        
-    def within_safety_fence(self, joint_extremes):
-        for xx,joint_xyz in enumerate(joint_extremes):
-            good_xyz, hit = trim_and_check_pose_safety(joint_xyz, self.fence)
-            if hit:
-                return False
-        return True
- 
     def find_random_joint_angles(self, max_trys=10000):
         safe = False
+        st = time.time()
         bounds = self.safety_physics.action_spec()
         # clip rotations to one revolution
         min_bounds = bounds.minimum.clip(-np.pi*2, np.pi*2)
@@ -611,31 +584,68 @@ class Jaco(base.Task):
         while not safe and trys < max_trys:
             random_angles = self.random_state.uniform(min_bounds, max_bounds, len(min_bounds))
             trys+=1
-            if self.is_safe_position(random_angles):
+            if not self.count_safety_violations(random_angles):
+                et = time.time()
+                print('took %s seconds and %s trys to find random position'%((et-st), trys))
                 return random_angles
+        
         print('unable to find safe random joints after {} trys'.format(trys))
         return self.home_joint_angles
 
-    def is_safe_position(self, angles):
-        joint_extremes = _find_joint_coordinate_extremes(angles[:self.safety_physics.n_major_actuators])
-        if self.within_safety_fence(joint_extremes):
-            if not self.check_for_self_collisions(angles):
-                 return True
-        return False
+
+    def count_safety_violations(self, joint_angles):
+        violations = 0
+        self.safety_physics.set_joint_angles(joint_angles)
+        self.safety_physics.after_reset()
+        penetrating = self.safety_physics.data.ncon
+        if penetrating > 0: 
+            for contact in self.safety_physics.data.contact:
+                if contact.geom1 in self.safety_physics.specific_collision_geom_ids and contact.geom2 in self.safety_physics.specific_collision_geom_ids:
+                    contact_name1 = self.safety_physics.body_parts[self.safety_physics.body_ids.index(contact.geom1)]
+                    contact_name2 = self.safety_physics.body_parts[self.safety_physics.body_ids.index(contact.geom2)]
+                    print("{} collided with {}".format(contact_name1, contact_name2))
+                    violations += 1
+        positions = self.safety_physics.named.data.xpos[self.safety_physics.body_parts]
+        for position in positions:
+            violations += self.is_violating_fence(position)
+        return violations
             
-    def make_target(self, target_type='random', max_distance=1.1):
+    def is_violating_fence(self, position):
+        violations = 0
+        assert len(position) == 3
+        for ind, var in enumerate(['x','y','z']): 
+            vals = position[ind]
+            if vals < min(self.fence[var]):
+                print('fence min', var, vals, min(self.fence[var]))
+                violations += 1
+            if vals > max(self.fence[var]):
+                print('fence max', var, vals, max(self.fence[var]))
+                violations += 1
+        return violations
+ 
+    def make_target(self, target_type='random', limit_distance_from=[0,0,0]):
         assert target_type in ['random', 'fixed']
         if target_type == 'random':
-            # limit distance from tool pose to within 1.1 meters of the base
-            # TODO how does collision with the target impact physics? 
-            # We don't want it to actually collide
-            distance = max_distance + 10
-            while distance > max_distance: 
-                tx = self.random_state.uniform(self.target_minx, self.target_maxx)
-                ty = self.random_state.uniform(self.target_miny, self.target_maxy)
-                tz = self.random_state.uniform(self.target_minz, self.target_maxz)
-                distance = np.sqrt(tx**2 + ty**2 + tz**2)
+            # TODO - should make sure it doesn't collide with the current robot position
+            # limit distance from tool pose to within max_distance meters of the tool
+            base_distance = self.max_target_distance_from_base + 10
+            attempts = 0
+            px, py, pz = limit_distance_from
+            tx, ty, tz = 1000, 1000, 1000
             target_position = np.array([tx,ty,tz])
+            while base_distance > self.max_target_distance_from_base or self.is_violating_fence(target_position):
+                r = self.random_state.uniform(0, self.max_target_distance_from_tool)
+                theta = self.random_state.uniform(0, np.pi)
+                phi = self.random_state.uniform(0, 2*np.pi)
+                tx = px + r*np.sin(theta)*np.cos(phi)
+                ty = py + r*np.sin(theta)*np.sin(phi)
+                tz = pz + r*np.cos(theta)
+                base_distance = np.sqrt(tx**2 + ty**2 + tz**2)
+                target_position = np.array([tx,ty,tz])
+                attempts += 1
+                print('attempt {} at finding target {}'.format(attempts, target_position))
+                print('basedistance {}'.format(base_distance))
+ 
         elif target_type == 'fixed':
             target_position = self.fixed_target_position
         else:
@@ -646,14 +656,15 @@ class Jaco(base.Task):
 
     def initialize_episode(self, physics):
         """Sets the state of the environment at the start of each episode."""
+        print('initialize episode')
         physics.set_joint_angles(self.get_position_angles_by_name(self.start_position))
-        self.target_position = self.make_target(self.target_type)
-
+        self.after_step(physics)
+        print('starting episode with joint angles: {}'.format(self.joint_angles))
+        print('starting episode with tool position: {}'.format(self.tool_position))
+        # tool position and joint position are updated in after step
+        self.last_tool_position = deepcopy(self.tool_position)
+        self.target_position = self.make_target(self.target_type, self.tool_position)
         # init vars
-        self.joint_angles = deepcopy(physics.get_joint_angles_radians())
-        self.joint_extremes = deepcopy(_find_joint_coordinate_extremes(self.joint_angles[:self.safety_physics.n_major_actuators]))
-        self.tool_position = self.joint_extremes[-1]
-        self.last_tool_position = self.joint_extremes[-1]
         physics.set_position_of_target(self.target_position, self.target_size)
         super(Jaco, self).initialize_episode(physics)
 
@@ -662,8 +673,6 @@ class Jaco(base.Task):
         take in relative or absolute np.array of actions of length self.DOF
         if relative mode, action will be relative to the current state
         """
-        self.safe_step = True
-        self.hit_penalty = 0.0
         # need action to be same shape as number of actuators
         if self.relative_step:
             # relative action prone to drift over time
@@ -674,38 +683,22 @@ class Jaco(base.Task):
 
         if len(use_action) < physics.n_actuators:
             use_action = np.hstack((use_action, self.closed_hand_position))
-        joint_extremes = _find_joint_coordinate_extremes(use_action[:physics.n_major_actuators])
-        for xx,joint_xyz in enumerate(joint_extremes):
-            good_xyz, hit = trim_and_check_pose_safety(joint_xyz, self.fence)
-            if hit:
-                #print('{} DH:{} {} will hit at {} at requested joint position - blocking action'.format(physics.type, xx, joint_extremes[xx], good_xyz))
-                self.hit_penalty -= 1.0
-                self.safe_step = False
-        if self.check_for_self_collisions(use_action):
-            self.hit_penalty -= 10.0
-            self.safe_step = False
         super(Jaco, self).before_step(use_action, physics)
 
     def after_step(self, physics):
         self.joint_angles = deepcopy(physics.get_joint_angles_radians())
-        self.joint_extremes = deepcopy(_find_joint_coordinate_extremes(self.joint_angles[:7]))
+        # this sets safety physics
+        self.hit_penalty = -self.count_safety_violations(self.joint_angles)
+        print('after step penalty', self.hit_penalty)
         self.last_tool_position = deepcopy(self.tool_position)
-        self.tool_position = self.joint_extremes[-1]
- 
+        self.tool_position = self.safety_physics.named.data.site_xpos['pinchsite']
+        
     def get_observation(self, physics):
         """Returns either features or only sensors (to be used with pixels)."""
         obs = collections.OrderedDict()
+        #print("TOOL POSITION", physics.type, self.tool_position)
         obs['to_target'] = self.target_position-self.tool_position
         obs['joint_angles'] = self.joint_angles
-        #obs['joint_forces'] = physics.get_actuator_force()
-        #obs['joint_velocity'] = physics.get_actuator_velocity()
-        #obs['timestep'] = physics.get_timestep()
-        ## DEBUG vars
-        #obs['joint_extremes'] = self.joint_extremes
-        #obs['tool_position'] = self.tool_position
-        #obs['jaco_link_4'] = physics.named.data.xpos['jaco_link_4']
-        #obs['jaco_link_6'] = physics.named.data.xpos['jaco_link_6']
-        #obs['target_position'] = self.target_position
         return obs
 
     def get_distance(self, position_1, position_2):

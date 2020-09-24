@@ -46,6 +46,7 @@ import six
 import time
 import json
 from IPython import embed
+from skimage.transform import rotate
 
 class RobotClient():
   def __init__(self, robot_ip="127.0.0.1", port=9030):
@@ -61,6 +62,7 @@ class RobotClient():
       print("attempting to connect with robot at {}".format(self.robot_ip))
       self.tcp_socket = socket.socket(socket.AF_INET,socket.SOCK_STREAM)
       self.tcp_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+      self.tcp_socket.settimeout(100)
       # connect to computer
       self.tcp_socket.connect((self.robot_ip, self.port))
       print('connected')
@@ -88,23 +90,51 @@ class RobotClient():
     joint_velocity = json.loads(vals[6])
     joint_effort = json.loads(vals[7])
     tool_pose = json.loads(vals[8])
-    image_enc = vals[9]
-    image_height = int(vals[10])
-    image_width = int(vals[11])
-    image_data = vals[12]
-    image_dict = {'enc':image_enc, 
-                     'height':image_height, 
-                     'width':image_width, 
-                     'data':image_data}
     #print('returning from decode state')
-    return timediff, joint_position, joint_velocity, joint_effort, tool_pose, image_dict
+    return timediff, joint_position, joint_velocity, joint_effort, tool_pose
 
   def send(self, cmd, msg='XX'):
     packet = self.startseq+cmd+self.midseq+msg+self.endseq
     self.tcp_socket.sendall(packet.encode())
     # TODO - should prob handle larger packets
-    rx = self.tcp_socket.recv(2048+921600).decode()
+    self.tcp_socket.settimeout(100)
+    rx = self.tcp_socket.recv(2048).decode()
     return rx
+
+  def render(self):
+    packet = self.startseq+"RENDER"+self.midseq+"XX"+self.endseq
+    self.tcp_socket.settimeout(100)
+    self.tcp_socket.sendall(packet.encode())
+    self.tcp_socket.settimeout(100)
+    # TODO - should prob handle larger packets
+    rxl = []
+    rxing = True
+    cnt = 0
+    end = self.endseq.encode()
+    print('render start', cnt)
+    while rxing:
+        rx = self.tcp_socket.recv(2048)
+        rxl.append(rx)
+        cnt +=1
+        # byte representation of endseq
+        if rx[-2:] == end:
+            rxing = False
+    print('render finished', cnt)
+    allrx = b''.join(rxl)[2:-2]
+    # height, width
+    img = np.frombuffer(allrx, dtype=np.uint8).reshape(480,640,3) 
+    # right now cam is rotated
+    img = (rotate(img, -90, resize=True)*255).astype(np.uint8)
+    #image_enc = vals[9]
+    #image_height = int(vals[10])
+    #image_width = int(vals[11])
+    #image_data = vals[12]
+    #image_dict = {'enc':image_enc, 
+    #              'height':image_height, 
+    #              'width':image_width, 
+    #              'data':image_data}
+    return img
+
 
   def home(self):
     return self.send('HOME')
@@ -179,8 +209,8 @@ class Physics(_control.Physics):
                 min(self.fence['x']), max(self.fence['x']),
                 min(self.fence['y']), max(self.fence['y']),
                 min(self.fence['z']), max(self.fence['z']))
-    self.image_dict = {'enc':'none', 'width':0, 'height':0, 'data':'none'}
     self.handle_state(resp)
+    self.image_dict = {'enc':'none', 'width':0, 'height':0, 'data':'none'}
     print('finished initialize on dm_control')
 
   def set_control(self, control):
@@ -222,9 +252,10 @@ class Physics(_control.Physics):
     Returns:
       The rendered RGB, depth or segmentation image.
     """
-    img = self.image_dict['data']
-    embed()
-    return np.zeros((height,width,3))
+    # TODO respect image size
+
+    img = self.robot_client.render()
+    return img
 
   def get_state(self):
     """Returns the physics state.
@@ -246,57 +277,13 @@ class Physics(_control.Physics):
     return [self.actuator_position, self.actuator_velocity, self.actuator_effort]
 
   def handle_state(self, state_tuple):
-    timediff, joint_position, joint_velocity, joint_effort, tool_pose, image_dict = state_tuple
+    timediff, joint_position, joint_velocity, joint_effort, tool_pose = state_tuple
     #print("HANDLE", joint_position)
     self.timediff = timediff
     self.actuator_position = np.array(joint_position)
     self.actuator_velocity = np.array(joint_velocity)
     self.actuator_effort = np.array(joint_effort)
     self.tool_pose = np.array(tool_pose)
-    self.image_dict = image_dict
-
-#  def set_state(self, physics_state):
-#    """Sets the physics state.
-#
-#    Args:
-#      physics_state: NumPy array containing the full physics simulation state.
-#
-#    Raises:
-#      ValueError: If `physics_state` has invalid size.
-#    """
-#    state_items = self._physics_state_items()
-#
-#    expected_shape = (sum(item.size for item in state_items),)
-#    if expected_shape != physics_state.shape:
-#      raise ValueError('Input physics state has shape {}. Expected {}.'.format(
-#          physics_state.shape, expected_shape))
-#
-#    start = 0
-#    for state_item in state_items:
-#      size = state_item.size
-#      np.copyto(state_item, physics_state[start:start + size])
-#      start += size
-
-  #def copy(self, share_model=False):
-  #  """Creates a copy of this `Physics` instance.
-
-  #  Args:
-  #    share_model: If True, the copy and the original will share a common
-  #      MjModel instance. By default, both model and data will both be copied.
-
-  #  Returns:
-  #    A `Physics` instance.
-  #  """
-  #  if not share_model:
-  #    new_model = self.model.copy()
-  #  else:
-  #    new_model = self.model
-  #  new_data = wrapper.MjData(new_model)
-  #  mjlib.mj_copyData(new_data.ptr, new_data.model.ptr, self.data.ptr)
-  #  cls = self.__class__
-  #  new_obj = cls.__new__(cls)
-  #  new_obj._reload_from_data(new_data)  # pylint: disable=protected-access
-  #  return new_obj
 
   def reset(self):
     """Resets internal variables of the physics simulation."""
@@ -313,25 +300,7 @@ class Physics(_control.Physics):
 
   def forward(self):
     """Recomputes the forward dynamics without advancing the simulation."""
-    # Note: `mj_forward` differs from `mj_step1` in that it also recomputes
-    # quantities that depend on acceleration (and therefore on the state of the
-    # controls). For example `mj_forward` updates accelerometer and gyro
-    # readings, whereas `mj_step1` does not.
-    #with self.check_invalid_state():
-    #  mjlib.mj_forward(self.model.ptr, self.data.ptr)
     pass
-
-  #@contextlib.contextmanager
-  #def check_invalid_state(self):
-  #  """Raises a `base.PhysicsError` if the simulation state is invalid."""
-  #  # `np.copyto(dst, src)` is marginally faster than `dst[:] = src`.
-  #  np.copyto(self._warnings_before, self._warnings)
-  #  yield
-  #  np.greater(self._warnings, self._warnings_before, out=self._new_warnings)
-  #  if any(self._new_warnings):
-  #    warning_names = np.compress(self._new_warnings, enums.mjtWarning._fields)
-  #    raise _control.PhysicsError(
-  #        _INVALID_PHYSICS_STATE.format(warning_names=', '.join(warning_names)))
 
   def __getstate__(self):
     return self.data  # All state is assumed to reside within `self.data`.

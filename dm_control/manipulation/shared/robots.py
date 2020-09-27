@@ -22,7 +22,6 @@ from __future__ import print_function
 from dm_control.entities.manipulators import kinova
 from dm_control.manipulation.shared import observations
 
-
 # The default position of the base of the arm relative to the origin.
 ARM_OFFSET = (0., 0.4, 0.)
 

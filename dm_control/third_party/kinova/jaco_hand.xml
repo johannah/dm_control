@@ -27,8 +27,8 @@
     <body name="hand" quat="0. 0.70710678118 0.70710678118 0.">
       <site name="gripsite" pos="0 -0.0001 -.159" quat="0 0.70710678118 0.70710678118 0"/>
       <site name="pinchsite" pos="0.015 0.0024 -0.193" quat="0 0.70710678118 0.70710678118 0"/>
-      <geom name="link_6_main" mesh="hand_3finger_main" mass="0.54719"/>
-      <geom name="link_6_insert" mesh="hand_3finger_insert" material="light_gray" mass="0"/>
+      <geom name="link_end_main" mesh="hand_3finger_main" mass="0.54719"/>
+      <geom name="link_end_insert" mesh="hand_3finger_insert" material="light_gray" mass="0"/>
       <body name="b_finger_1" pos="0.00279 0.03126 -0.11467" quat="0.24396 -0.63159 -0.38818 0.62521" childclass="finger_proximal">
         <joint name="finger_1"/>
         <geom name="finger_knuckle_1"/>

@@ -29,10 +29,6 @@ from dm_control.entities.manipulators import base
 from dm_control.entities.manipulators.kinova import assets_path
 import numpy as np
 
-_JACO_ARM_XML_PATH = os.path.join(assets_path.KINOVA_ROOT, 'jaco_arm.xml')
-_LARGE_JOINTS = ('joint_1', 'joint_2', 'joint_3')
-_SMALL_JOINTS = ('joint_4', 'joint_5', 'joint_6')
-_ALL_JOINTS = _LARGE_JOINTS + _SMALL_JOINTS
 _WRIST_SITE = 'wristsite'
 
 # These are the peak torque limits taken from Kinova's datasheet:
@@ -48,28 +44,42 @@ _SMALL_JOINT_MAX_VELOCITY = np.deg2rad(48.)
 
 # The velocity actuator gain is a very rough estimate, and should be considered
 # a placeholder for proper system identification.
-_VELOCITY_GAIN = 500.
+#_VELOCITY_GAIN = 500.
+_SMALL_VELOCITY_GAIN = 150.
+_LARGE_VELOCITY_GAIN = 500.
 
 
 class JacoArm(base.RobotArm):
   """A composer entity representing a Jaco arm."""
 
-  def _build(self, name=None):
+  def _build(self, name='j2s7'):
     """Initializes the JacoArm.
 
     Args:
       name: String, the name of this robot. Used as a prefix in the MJCF name
         name attributes.
     """
-    self._mjcf_root = mjcf.from_path(_JACO_ARM_XML_PATH)
+    
+    self._jaco_arm_xml_path = os.path.join(assets_path.KINOVA_ROOT, 'jaco_arm_{}.xml'.format(name))
+    self.num_joints = int(name[-1])
+    if self.num_joints == 6:
+      self._large_joints = ('joint_1', 'joint_2', 'joint_3')
+      self._small_joints = ('joint_4', 'joint_5', 'joint_6')
+    elif self.num_joints == 7:
+      self._large_joints = ('joint_1', 'joint_2', 'joint_3', 'joint_4')
+      self._small_joints = ('joint_5', 'joint_6', 'joint_7')
+    else:
+      raise NotImplementedError
+    self._all_joints = self._large_joints + self._small_joints 
+    self._mjcf_root = mjcf.from_path(self._jaco_arm_xml_path)
     if name:
       self._mjcf_root.model = name
     # Find MJCF elements that will be exposed as attributes.
-    self._joints = [self._mjcf_root.find('joint', name) for name in _ALL_JOINTS]
+    self._joints = [self._mjcf_root.find('joint', name) for name in self._all_joints]
     self._wrist_site = self._mjcf_root.find('site', _WRIST_SITE)
     self._bodies = self.mjcf_model.find_all('body')
     # Add actuators.
-    self._actuators = [_add_velocity_actuator(joint) for joint in self._joints]
+    self._actuators = [self._add_velocity_actuator(joint) for joint in self._joints]
     # Add torque sensors.
     self._joint_torque_sensors = [
         _add_torque_sensor(joint) for joint in self._joints]
@@ -102,28 +112,31 @@ class JacoArm(base.RobotArm):
     """Returns the `mjcf.RootElement` object corresponding to this robot."""
     return self._mjcf_root
 
-
-def _add_velocity_actuator(joint):
-  """Adds a velocity actuator to a joint, returns the new MJCF element."""
-
-  if joint.name in _LARGE_JOINTS:
-    max_torque = _LARGE_JOINT_MAX_TORQUE
-    max_velocity = _LARGE_JOINT_MAX_VELOCITY
-  elif joint.name in _SMALL_JOINTS:
-    max_torque = _SMALL_JOINT_MAX_TORQUE
-    max_velocity = _SMALL_JOINT_MAX_VELOCITY
-  else:
-    raise ValueError('`joint.name` must be one of {}, got {!r}.'
-                     .format(_ALL_JOINTS, joint.name))
-  return joint.root.actuator.add(
+  def _add_velocity_actuator(self, joint):
+    """Adds a velocity actuator to a joint, returns the new MJCF element."""
+  
+    if joint.name in self._large_joints:
+      max_torque = _LARGE_JOINT_MAX_TORQUE
+      max_velocity = _LARGE_JOINT_MAX_VELOCITY
+      vel_gain = _LARGE_VELOCITY_GAIN
+    elif joint.name in self._small_joints:
+      max_torque = _SMALL_JOINT_MAX_TORQUE
+      max_velocity = _SMALL_JOINT_MAX_VELOCITY
+      vel_gain = _SMALL_VELOCITY_GAIN
+    else:
+      raise ValueError('`joint.name` must be one of {}, got {!r}.'
+                       .format(self._all_joints, joint.name))
+    return joint.root.actuator.add(
       'velocity',
       joint=joint,
       name=joint.name,
-      kv=_VELOCITY_GAIN,
+      kv=vel_gain,
       ctrllimited=True,
       ctrlrange=(-max_velocity, max_velocity),
       forcelimited=True,
       forcerange=(-max_torque, max_torque))
+
+
 
 
 def _add_torque_sensor(joint):

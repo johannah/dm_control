@@ -27,8 +27,8 @@ from dm_control import mjcf
 from dm_control.composer.observation import observable
 from dm_control.entities.manipulators import base
 from dm_control.entities.manipulators.kinova import assets_path
-
 _JACO_HAND_XML_PATH = os.path.join(assets_path.KINOVA_ROOT, 'jaco_hand.xml')
+#_JACO_HAND_XML_PATH = os.path.join(assets_path.KINOVA_ROOT, 'jaco_hand_j2s7.xml')
 _HAND_BODY = 'hand'
 _PINCH_SITE = 'pinchsite'
 _GRIP_SITE = 'gripsite'
